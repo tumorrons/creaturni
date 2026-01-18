@@ -215,11 +215,28 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
         return null;
     }
 
+    // 🔒 2. VINCOLO HARD: Esclude operatori che hanno già questo turno nello stesso giorno
+    // (Previene stesso operatore per 2+ slot di x2/x3)
+    const operatoriSenzaDoppi = operatoriValidi.filter(profilo => {
+        const haGiaQuesto = haGiaQuestoTurnoNelloStessoGiorno(profilo.id, giorno, mese, anno, codiceTurno, bozza);
+        if (haGiaQuesto) {
+            console.log(`[AUTO-ENGINE]   🚫 ${profilo.nome} escluso: ha già ${codiceTurno} il giorno ${giorno}`);
+        }
+        return !haGiaQuesto;
+    });
+
+    console.log(`[DEBUG] Dopo filtro doppi: ${operatoriSenzaDoppi.map(p => p.nome).join(', ')}`);
+
+    if (operatoriSenzaDoppi.length === 0) {
+        console.log(`[AUTO-ENGINE]   ⚠️ Nessun operatore disponibile dopo filtro doppi`);
+        return null;
+    }
+
     // Ottieni stato copertura corrente per questo slot
     const statoCopertura = coperturaCorrente.get(slotKey);
 
-    // 2. Calcola score per ogni operatore
-    const scored = operatoriValidi.map(profilo => {
+    // 3. Calcola score per ogni operatore (solo quelli senza doppi)
+    const scored = operatoriSenzaDoppi.map(profilo => {
         // Costruisci context includendo turni già generati nella bozza
         const context = costruisciContext(profilo, giorno, mese, anno, codiceTurno, ambulatorio, bozza);
 
@@ -443,4 +460,46 @@ function calcolaTurniSettimana(turniOperatore, giornoCorrente) {
     return turniOperatore.filter(t =>
         t.giorno < giornoCorrente && t.giorno >= (giornoCorrente - 7)
     ).length;
+}
+
+/**
+ * Verifica se un operatore ha già lo stesso turno nello stesso giorno
+ * (sia in localStorage che nella bozza corrente)
+ *
+ * @param {string} operatoreId
+ * @param {number} giorno
+ * @param {number} mese
+ * @param {number} anno
+ * @param {string} codiceTurno
+ * @param {Object} bozza - Bozza corrente
+ * @returns {boolean} - true se ha già questo turno
+ */
+function haGiaQuestoTurnoNelloStessoGiorno(operatoreId, giorno, mese, anno, codiceTurno, bozza) {
+    // 1. Controlla localStorage
+    const turnoSalvato = caricaTurno(operatoreId, giorno, anno, mese);
+    if (turnoSalvato) {
+        // Estrai codice turno (può essere "AMB_TURNO" o solo "TURNO")
+        let codice = turnoSalvato;
+        if (turnoSalvato.includes('_')) {
+            const parts = turnoSalvato.split('_');
+            codice = parts[parts.length - 1];
+        }
+        if (codice === codiceTurno) {
+            return true;
+        }
+    }
+
+    // 2. Controlla bozza (turni già generati in questa sessione)
+    if (bozza && bozza.turni) {
+        const haInBozza = bozza.turni.some(t =>
+            t.operatore === operatoreId &&
+            t.giorno === giorno &&
+            t.turno === codiceTurno
+        );
+        if (haInBozza) {
+            return true;
+        }
+    }
+
+    return false;
 }
