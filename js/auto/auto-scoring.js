@@ -1,11 +1,15 @@
 /**
  * auto-scoring.js
- * Motore di scoring per la generazione automatica
+ * Motore di scoring per la generazione automatica - v4.0
  *
- * Filosofia:
+ * FILOSOFIA v4:
  * - Deterministico: stessi input = stesso output
  * - Trasparente: ogni punto ha una motivazione
- * - Componibile: score = somma di componenti indipendenti
+ * - Gerarchia chiara: SEDE > PREFERENZE > BILANCIAMENTO
+ * - Pesi significativi: sede domina (100/40), preferenze influenzano (±20), bilanciamento pareggia (max 20)
+ *
+ * Formula:
+ *   score = sede (100/40) + preferenze (±20) + bilanciamento (max 20) + random (0-2)
  */
 
 import { valutaRegolaCustom } from '../regole-custom.js';
@@ -13,10 +17,19 @@ import { getState } from '../state.js';
 import { caricaTurno } from '../storage.js';
 import { calcolaMinutiTurno } from '../turni.js';
 
-console.log('📊 [AUTO-SCORING] Modulo caricato correttamente');
+console.log('📊 [AUTO-SCORING] Modulo caricato correttamente (v4.0 - formula sede>preferenze>bilanciamento)');
 
 /**
  * Calcola lo score di un operatore per un'assegnazione specifica
+ *
+ * FORMULA v4:
+ *   score = sede (100/40) + preferenze (±20) + bilanciamento (max 20) + random (0-2)
+ *
+ * GERARCHIA:
+ *   1. SEDE (100/40) - domina sempre
+ *   2. PREFERENZE (±20) - influenzano ma non sovrastano sede
+ *   3. BILANCIAMENTO (max 20) - pareggia tra operatori con stesso livello
+ *   4. RANDOM (0-2) - evita pattern fissi
  *
  * @param {Object} profilo - Profilo operatore completo
  * @param {number} giorno - Giorno del mese
@@ -27,107 +40,109 @@ console.log('📊 [AUTO-SCORING] Modulo caricato correttamente');
  */
 export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio, context) {
     const breakdown = {
-        base: 0,
-        sedePrincipale: 0,
-        sedePreferita: 0,
-        turnoEvitato: 0,
-        oreSettimanali: 0,
-        bilanciamentoOre: 0,  // Favorisce distribuzione equa
-        preferenzeCustom: 0,
-        vincoliCustom: 0,
+        sede: 0,              // +100 (primaria) o +40 (secondaria)
+        preferenzeTurno: 0,   // ±20 (preferiti/evitati)
+        bilanciamento: 0,     // max +20 (inversamente proporzionale ore)
+        variazione: 0,        // +0-2 (random)
+        vincoliViolati: 0,    // penalità vincoli hard
         totale: 0
     };
 
     const motivazioni = [];
 
-    // 1. BASE: Disponibilità (tutti partono da 0, ma essere disponibile = +0)
-    breakdown.base = 0;
-
-    // 2. SEDE PRINCIPALE (forte bonus)
+    // ========================================
+    // 1️⃣ SEDE (più importante di tutto)
+    // ========================================
     if (profilo.sedePrincipale === ambulatorio) {
-        breakdown.sedePrincipale = 10;
-        motivazioni.push(`Sede principale (${ambulatorio})`);
+        breakdown.sede = 100;
+        motivazioni.push(`💯 Sede primaria (${ambulatorio})`);
+    } else if (profilo.sediSecondarie && profilo.sediSecondarie.includes(ambulatorio)) {
+        breakdown.sede = 40;
+        motivazioni.push(`👍 Sede secondaria (${ambulatorio})`);
     }
+    // Altrimenti sede = 0 (sede non compatibile)
 
-    // 3. SEDE PREFERITA (bonus medio)
-    if (profilo.preferenze?.sedePreferita === ambulatorio) {
-        breakdown.sedePreferita = 5;
-        motivazioni.push("Sede preferita");
-    }
-
-    // 4. TURNO EVITATO (penalità media)
+    // ========================================
+    // 2️⃣ PREFERENZE TURNO
+    // ========================================
     const turniEvitati = profilo.preferenze?.evitaTurni || [];
     if (turniEvitati.includes(codiceTurno)) {
-        breakdown.turnoEvitato = -10;
-        motivazioni.push(`Evita turno ${codiceTurno}`);
+        breakdown.preferenzeTurno = -20;
+        motivazioni.push(`❌ Evita turno ${codiceTurno}`);
     }
 
-    // 5. ORE SETTIMANALI (penalità forte se supera)
+    // TODO futuro: aggiungere turniPreferiti: +20
+    // const turniPreferiti = profilo.preferenze?.turniPreferiti || [];
+    // if (turniPreferiti.includes(codiceTurno)) {
+    //     breakdown.preferenzeTurno = +20;
+    //     motivazioni.push(`⭐ Preferisce turno ${codiceTurno}`);
+    // }
+
+    // ========================================
+    // 3️⃣ BILANCIAMENTO ORE (moderato)
+    // ========================================
+    // Più ore hai fatto, meno punteggio ottieni
+    // Formula: Math.max(0, 20 - oreSettimana)
+    // 0h → +20, 10h → +10, 20h → +0, 30h → +0
+    if (context.oreSettimana !== undefined) {
+        breakdown.bilanciamento = Math.max(0, 20 - context.oreSettimana);
+        if (context.oreSettimana > 0) {
+            motivazioni.push(`⚖️ Ore settimana: ${context.oreSettimana}h`);
+        }
+    }
+
+    // ========================================
+    // 4️⃣ VINCOLI HARD (penalità se violati)
+    // ========================================
+    // Controlla vincolo maxOreSettimanali
     const maxOre = profilo.vincoli?.maxOreSettimanali;
     if (maxOre && context.oreSettimana !== undefined) {
-        // Usa funzione centralizzata che gestisce correttamente tutti i tipi di turno
         const minutiTurno = calcolaMinutiTurno(codiceTurno);
         const oreTurno = minutiTurno / 60;
         const nuovoTotale = context.oreSettimana + oreTurno;
 
         if (nuovoTotale > maxOre) {
             const eccesso = nuovoTotale - maxOre;
-            breakdown.oreSettimanali = -20;
-            motivazioni.push(`Supererebbe ore settimanali (${nuovoTotale.toFixed(1)}/${maxOre}, +${eccesso.toFixed(1)}h)`);
+            breakdown.vincoliViolati = -50; // Penalità forte
+            motivazioni.push(`⚠️ Supererebbe ore max (${nuovoTotale.toFixed(1)}/${maxOre}, +${eccesso.toFixed(1)}h)`);
         }
     }
 
-    // 5b. BILANCIAMENTO ORE (favorisce distribuzione equa)
-    // Penalità progressiva proporzionale alle ore già accumulate
-    // Chi ha meno ore ha punteggio migliore → distribuzione equa
-    if (context.oreSettimana !== undefined && context.oreSettimana > 0) {
-        // Penalità: -1 punto ogni 3.5 ore accumulate
-        // Es: 7h → -2, 14h → -4, 21h → -6, 28h → -8, 35h → -10
-        breakdown.bilanciamentoOre = -Math.floor(context.oreSettimana / 3.5);
-        motivazioni.push(`Ore settimana: ${context.oreSettimana}h`);
-    }
-
-    // 6. REGOLE CUSTOM PREFERENZE (bonus variabile)
-    const regolePreferenze = profilo.preferenze?.regole || [];
-    if (regolePreferenze.length > 0) {
-        regolePreferenze.filter(r => r.attiva).forEach(regola => {
-            const risultato = valutaRegolaCustom(regola, context);
-            if (risultato && risultato.gravita === 'info') {
-                breakdown.preferenzeCustom += 3; // Bonus piccolo per preferenze rispettate
-                motivazioni.push(risultato.messaggio);
-            }
-        });
-    }
-
-    // 7. REGOLE CUSTOM VINCOLI (penalità variabile)
+    // Regole custom vincoli
     const regoleVincoli = profilo.vincoli?.regole || [];
     if (regoleVincoli.length > 0) {
         regoleVincoli.filter(r => r.attiva).forEach(regola => {
             const risultato = valutaRegolaCustom(regola, context);
             if (risultato) {
                 if (risultato.gravita === 'warning') {
-                    breakdown.vincoliCustom -= 15; // Penalità media per vincoli violati
+                    breakdown.vincoliViolati -= 30;
                     motivazioni.push("⚠️ " + risultato.messaggio);
                 } else if (risultato.gravita === 'error') {
-                    breakdown.vincoliCustom -= 30; // Penalità forte per vincoli critici
+                    breakdown.vincoliViolati -= 60;
                     motivazioni.push("❌ " + risultato.messaggio);
                 }
             }
         });
     }
 
-    // 8. CALCOLA TOTALE
-    breakdown.totale =
-        breakdown.base +
-        breakdown.sedePrincipale +
-        breakdown.sedePreferita +
-        breakdown.turnoEvitato +
-        breakdown.oreSettimanali +
-        breakdown.bilanciamentoOre +
-        breakdown.preferenzeCustom +
-        breakdown.vincoliCustom;
+    // ========================================
+    // 5️⃣ VARIAZIONE RANDOM (evita pattern fissi)
+    // ========================================
+    breakdown.variazione = Math.random() * 2;
 
-    // 9. CALCOLA CONFIDENZA (normalizza score in 0-1)
+    // ========================================
+    // 6️⃣ CALCOLA TOTALE
+    // ========================================
+    breakdown.totale =
+        breakdown.sede +
+        breakdown.preferenzeTurno +
+        breakdown.bilanciamento +
+        breakdown.variazione +
+        breakdown.vincoliViolati;
+
+    // ========================================
+    // 7️⃣ CALCOLA CONFIDENZA (normalizza score in 0-1)
+    // ========================================
     const confidenza = scoreToConfidenza(breakdown.totale);
 
     return {
@@ -143,22 +158,26 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
  * Score positivi alti = confidenza alta
  * Score negativi = confidenza bassa
  *
+ * SCALE v4:
+ *   Max teorico: 100 + 20 + 20 + 2 = 142
+ *   Min teorico: 0 - 20 - 60 (vincoli) = -80
+ *
  * @param {number} score
  * @returns {number} - Confidenza 0-1
  */
 function scoreToConfidenza(score) {
-    // Punteggio massimo teorico: +10 (sede principale) +5 (sede pref) +10 (custom pref) = ~25
-    // Normalizziamo con un max di 30 per dare margine
-    const maxScore = 30;
+    // Punteggio massimo realistico: 142
+    // Normalizziamo con range -100 → +150
+    const maxScore = 150;
 
     // Se score negativo, confidenza proporzionalmente bassa
     if (score < 0) {
-        // -50 → 0.0, -25 → 0.25, 0 → 0.5
-        return Math.max(0, 0.5 + (score / 100));
+        // -100 → 0.0, -50 → 0.25, 0 → 0.5
+        return Math.max(0, 0.5 + (score / 200));
     }
 
     // Se score positivo, scala verso 1.0
-    // 0 → 0.5, 15 → 0.75, 30+ → 1.0
+    // 0 → 0.5, 75 → 0.75, 150+ → 1.0
     return Math.min(1.0, 0.5 + (score / (maxScore * 2)));
 }
 

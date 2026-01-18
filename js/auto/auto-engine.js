@@ -12,10 +12,11 @@ import { nuovaBozza, nuovoTurnoGenerato } from './auto-schema.js';
 import { calcolaScoreOperatore, filtraOperatoriValidi } from './auto-scoring.js';
 import { getState } from '../state.js';
 import { caricaTurno } from '../storage.js';
-import { verificaGiorno, caricaRegole } from '../coverage.js';
+import { caricaRegole } from '../coverage.js';
+import { espandiRegoleV3inV4, getRegoleGiorno } from '../coverage-v4.js';
 import { calcolaMinutiTurno, minutiToOreMinuti } from '../turni.js';
 
-console.log('⚙️ [AUTO-ENGINE] Modulo caricato correttamente');
+console.log('⚙️ [AUTO-ENGINE] Modulo caricato correttamente (v4.0 - sistema regole con priorità)');
 
 /**
  * Genera una bozza completa di turni per un mese
@@ -40,38 +41,25 @@ export function generaBozza(mese, anno, parametri = {}) {
     // Calcola quanti giorni ha il mese
     const giorniMese = new Date(anno, mese + 1, 0).getDate();
 
-    // 🗺️ MAPPA COPERTURA GLOBALE (tracking stato x2, x3, etc.)
-    const coperturaCorrente = new Map();
+    // 🔄 ESPANDI REGOLE v3 → v4 (una sola volta per tutto il mese)
+    const regoleV3 = caricaRegole();
+    const regoleV4 = espandiRegoleV3inV4(regoleV3);
+    console.log(`[AUTO-ENGINE] Caricate ${regoleV4.length} regole v4 per il mese`);
 
     // Itera su ogni giorno del mese
     for (let giorno = 1; giorno <= giorniMese; giorno++) {
         console.log(`[AUTO-ENGINE] Analisi giorno ${giorno}/${giorniMese}`);
 
-        // 1. Identifica quali turni servono questo giorno (da regole copertura)
-        const turniNecessari = identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, turni);
+        // 1. Identifica quali turni servono questo giorno (da regole v4)
+        const turniNecessari = identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4);
 
-        // 📊 ORDINA SLOT PER PRIORITÀ (x2, x3 prima)
-        turniNecessari.sort((a, b) => {
-            if (b.richiesti !== a.richiesti) {
-                return b.richiesti - a.richiesti;
-            }
-            return 0; // a parità, ordine naturale
-        });
+        // 📊 SLOT GIÀ ORDINATI PER PRIORITÀ da getRegoleGiorno()
 
-        // 2. Per ogni turno necessario, trova il miglior operatore
+        // 2. Per ogni regola (slot), trova il miglior operatore
         for (const slot of turniNecessari) {
-            const { ambulatorio, codiceTurno, motivazione, richiesti } = slot;
+            const { ambulatorio, codiceTurno, motivazione, priorita, obbligatoria } = slot;
 
-            console.log(`[AUTO-ENGINE]   Slot: ${ambulatorio} ${codiceTurno} (${motivazione})`);
-
-            // Inizializza copertura per questo slot se non esiste
-            const slotKey = `${anno}-${mese}-${giorno}|${ambulatorio}|${codiceTurno}`;
-            if (!coperturaCorrente.has(slotKey)) {
-                coperturaCorrente.set(slotKey, {
-                    coperti: 0,
-                    richiesti: richiesti || 1
-                });
-            }
+            console.log(`[AUTO-ENGINE]   📌 Slot: ${ambulatorio} ${codiceTurno} (priorità: ${priorita})`);
 
             // 2a. Controlla se già assegnato (se soloGiorniVuoti = true)
             if (parametri.soloGiorniVuoti && !parametri.rigeneraTutto) {
@@ -95,8 +83,7 @@ export function generaBozza(mese, anno, parametri = {}) {
                 ambulatorio,
                 parametri,
                 bozza,
-                coperturaCorrente,
-                slotKey
+                priorita
             );
 
             if (risultato) {
@@ -116,18 +103,13 @@ export function generaBozza(mese, anno, parametri = {}) {
                 bozza.turni.push(turnoGenerato);
                 bozza.metadata.statistiche.turniGenerati++;
 
-                // 🔥 AGGIORNA COPERTURA (questo è il cuore della soluzione)
-                const stato = coperturaCorrente.get(slotKey);
-                if (stato) {
-                    stato.coperti += 1;
-                    console.log(`[AUTO-ENGINE]   📊 Copertura aggiornata: ${stato.coperti}/${stato.richiesti}`);
-                }
-
                 console.log(`[AUTO-ENGINE]   ✅ Assegnato a ${profilo.nome} (score: ${totale}, confidenza: ${(confidenza * 100).toFixed(0)}%)`);
             } else {
                 // Nessun operatore disponibile
                 bozza.metadata.statistiche.slotVuoti++;
-                console.log(`[AUTO-ENGINE]   ❌ Nessun operatore disponibile`);
+
+                const livello = obbligatoria ? '❌ CRITICO' : '⚠️  Warning';
+                console.log(`[AUTO-ENGINE]   ${livello} Nessun operatore disponibile per slot priorità ${priorita}`);
             }
         }
     }
@@ -138,52 +120,48 @@ export function generaBozza(mese, anno, parametri = {}) {
 
 /**
  * Identifica quali turni servono per un dato giorno
- * Basato su regole di copertura
+ * Basato su regole v4 (con priorità)
+ *
+ * FILOSOFIA v4:
+ * - Ogni slot è una regola separata
+ * - NON più tracking di "richiesti" vs "presenti"
+ * - Regole già ordinate per priorità
  *
  * @param {number} giorno
  * @param {number} mese
  * @param {number} anno
  * @param {Object} parametri
- * @param {Object} ambulatori
- * @param {Object} turni
- * @returns {Array} - Array di { ambulatorio, codiceTurno, motivazione }
+ * @param {Array} regoleV4 - Regole già espanse
+ * @returns {Array} - Array di slot { ambulatorio, codiceTurno, motivazione, priorita, obbligatoria }
  */
-function identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, turni) {
+function identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4) {
     const slots = [];
 
     // Se parametri.usaCopertura è false, ritorna array vuoto
-    // (in futuro potremmo avere altre logiche per determinare i turni necessari)
     if (!parametri.usaCopertura) {
         return slots;
     }
 
-    // Carica regole di copertura
-    const regole = caricaRegole();
-    if (!regole || regole.length === 0) {
+    if (!regoleV4 || regoleV4.length === 0) {
         return slots;
     }
 
-    // Verifica copertura per questo giorno
-    const avvisi = verificaGiorno(giorno, mese, anno, regole);
+    // Ottieni regole applicabili a questo giorno (già ordinate per priorità)
+    const regoleApplicabili = getRegoleGiorno(regoleV4, giorno, mese, anno);
 
-    // Estrai turni mancanti da ogni avviso
-    avvisi.forEach(avviso => {
-        avviso.mancanti.forEach(mancante => {
-            // Filtro per ambulatorio se specificato
-            if (parametri.ambulatorioFiltro && parametri.ambulatorioFiltro !== mancante.ambulatorio) {
-                return;
-            }
+    // Converti ogni regola in uno slot
+    regoleApplicabili.forEach(regola => {
+        // Filtro per ambulatorio se specificato
+        if (parametri.ambulatorioFiltro && parametri.ambulatorioFiltro !== regola.ambulatorio) {
+            return;
+        }
 
-            // Aggiungi uno slot per ogni operatore mancante
-            const mancanza = mancante.richiesti - mancante.presenti;
-            for (let i = 0; i < mancanza; i++) {
-                slots.push({
-                    ambulatorio: mancante.ambulatorio,
-                    codiceTurno: mancante.turno,
-                    motivazione: `${avviso.descrizione} (${mancante.presenti}/${mancante.richiesti})`,
-                    richiesti: mancante.richiesti  // 🔥 Campo critico per tracking x2, x3, etc.
-                });
-            }
+        slots.push({
+            ambulatorio: regola.ambulatorio,
+            codiceTurno: regola.codiceTurno,
+            motivazione: regola.descrizione,
+            priorita: regola.priorita,
+            obbligatoria: regola.obbligatoria
         });
     });
 
@@ -193,6 +171,11 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, tur
 /**
  * Trova il miglior operatore per uno slot specifico
  *
+ * FILOSOFIA v4:
+ * - NON più bonus copertura (ogni slot è indipendente)
+ * - Priorità slot influenza solo l'ordine di assegnazione, NON lo score
+ * - Score puramente basato su: sede, preferenze, bilanciamento
+ *
  * @param {Object[]} operatori - Array profili operatori
  * @param {number} giorno
  * @param {number} mese
@@ -201,11 +184,10 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, tur
  * @param {string} ambulatorio
  * @param {Object} parametri
  * @param {Object} bozza - Bozza corrente con turni già generati
- * @param {Map} coperturaCorrente - Mappa copertura in tempo reale
- * @param {string} slotKey - Chiave dello slot corrente
+ * @param {number} priorita - Priorità dello slot (informativa, non influenza score)
  * @returns {Object|null} - { profilo, totale, breakdown, motivazioni, confidenza } o null
  */
-function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, coperturaCorrente, slotKey) {
+function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, priorita) {
     // 1. Filtra operatori validi (non inattivi, non assenti, etc.)
     const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese });
 
@@ -216,7 +198,7 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
     }
 
     // 🔒 2. VINCOLO HARD: Esclude operatori che hanno già questo turno nello stesso giorno
-    // (Previene stesso operatore per 2+ slot di x2/x3)
+    // (Previene stesso operatore per 2+ slot dello stesso turno)
     const operatoriSenzaDoppi = operatoriValidi.filter(profilo => {
         const haGiaQuesto = haGiaQuestoTurnoNelloStessoGiorno(profilo.id, giorno, mese, anno, codiceTurno, bozza);
         if (haGiaQuesto) {
@@ -232,9 +214,6 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
         return null;
     }
 
-    // Ottieni stato copertura corrente per questo slot
-    const statoCopertura = coperturaCorrente.get(slotKey);
-
     // 3. Calcola score per ogni operatore (solo quelli senza doppi)
     const scored = operatoriSenzaDoppi.map(profilo => {
         // Costruisci context includendo turni già generati nella bozza
@@ -242,56 +221,30 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
 
         console.log(`[DEBUG]   ${profilo.nome}: oreSettimana=${context.oreSettimana}, turniNelMese=${context.turniNelMese}`);
 
-        // Calcola score BASE
+        // Calcola score (v4: sede > preferenze > bilanciamento)
         const result = calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio, context);
 
-        // 🎯 BONUS COMPLETAMENTO COPERTURA (x2, x3, etc.)
-        let bonusCompletamento = 0;
-        if (statoCopertura && statoCopertura.richiesti > 1) {
-            const { coperti, richiesti } = statoCopertura;
-            const mancanti = richiesti - coperti;
-
-            if (mancanti > 0) {
-                // Bonus proporzionale a quanto manca
-                bonusCompletamento = mancanti * 15;
-
-                // Bonus EXTRA se questo slot CHIUDE la copertura (es. da 1/2 → 2/2)
-                if (coperti + 1 === richiesti) {
-                    bonusCompletamento += 25;
-                }
-
-                result.breakdown.bonusCompletamento = bonusCompletamento;
-                result.motivazioni.push(`🎯 Completa copertura (${coperti + 1}/${richiesti})`);
-            }
-        }
-
-        // Score totale con bonus
-        const scoreFinale = result.totale + bonusCompletamento;
-
-        console.log(`[DEBUG]   ${profilo.nome}: score=${scoreFinale} (base=${result.totale}, bonus=${bonusCompletamento}), breakdown=`, result.breakdown);
+        console.log(`[DEBUG]   ${profilo.nome}: score=${result.totale}, breakdown=`, result.breakdown);
 
         return {
             profilo,
-            totale: scoreFinale,
+            totale: result.totale,
             breakdown: result.breakdown,
             motivazioni: result.motivazioni,
             confidenza: result.confidenza
         };
     });
 
-    // 3. Ordina per score decrescente
+    // 4. Ordina per score decrescente
     scored.sort((a, b) => b.totale - a.totale);
 
     console.log(`[DEBUG]   Dopo sort: ${scored.map(s => `${s.profilo.nome}(${s.totale})`).join(', ')}`);
 
-    // 4. Prendi il migliore
+    // 5. Prendi il migliore
     const migliore = scored[0];
 
     console.log(`[DEBUG]   ✅ Scelto: ${migliore.profilo.nome} con score ${migliore.totale}`);
 
-    // Se tutti hanno score negativo molto basso, potremmo decidere di non assegnare nessuno
-    // (questo dipende dalla politica: meglio un turno con warning o lasciarlo vuoto?)
-    // Per ora: assegna sempre il migliore disponibile
     return migliore;
 }
 
