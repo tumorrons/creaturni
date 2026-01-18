@@ -13,6 +13,7 @@ import { calcolaScoreOperatore, filtraOperatoriValidi } from './auto-scoring.js'
 import { getState } from '../state.js';
 import { caricaTurno } from '../storage.js';
 import { verificaGiorno, caricaRegole } from '../coverage.js';
+import { calcolaMinutiTurno, minutiToOreMinuti } from '../turni.js';
 
 console.log('⚙️ [AUTO-ENGINE] Modulo caricato correttamente');
 
@@ -313,67 +314,37 @@ function raccogliTurniOperatore(operatoreId, mese, anno, bozza) {
 
 /**
  * Calcola ore settimanali (ultimi 7 giorni dal giorno specificato)
+ * Usa la funzione centralizzata calcolaMinutiTurno per coerenza
  *
  * @param {Array} turniOperatore - Array di { giorno, codiceTurno }
  * @param {number} giornoCorrente
- * @param {Object} turni - Definizioni turni da state
+ * @param {Object} turni - Definizioni turni da state (non usato, usa state interno)
  * @returns {number} - Ore totali
  */
 function calcolaOreSettimana(turniOperatore, giornoCorrente, turni) {
-    let ore = 0;
+    let minutiTotali = 0;
 
     console.log(`[DEBUG-ORE] calcolaOreSettimana chiamata: giornoCorrente=${giornoCorrente}, turniOperatore.length=${turniOperatore.length}`);
-    console.log(`[DEBUG-ORE]   turniOperatore=`, turniOperatore);
-    console.log(`[DEBUG-ORE]   turni keys disponibili:`, Object.keys(turni));
-    console.log(`[DEBUG-ORE]   turni completo:`, turni);
 
     turniOperatore.forEach(t => {
-        console.log(`[DEBUG-ORE]   Analisi turno: giorno=${t.giorno}, codiceTurno=${t.codiceTurno}`);
-
         // Conta solo turni negli ultimi 7 giorni
-        const passaCondizione = t.giorno < giornoCorrente && t.giorno >= (giornoCorrente - 7);
-        console.log(`[DEBUG-ORE]     Condizione data: ${t.giorno} < ${giornoCorrente} && ${t.giorno} >= ${giornoCorrente - 7} = ${passaCondizione}`);
+        if (t.giorno < giornoCorrente && t.giorno >= (giornoCorrente - 7)) {
+            // Usa la funzione CENTRALE che gestisce:
+            // - Turni speciali (0 ore)
+            // - Turni segmentati
+            // - Pause
+            // - Orari precisi
+            const minuti = calcolaMinutiTurno(t.codiceTurno);
+            minutiTotali += minuti;
 
-        if (passaCondizione) {
-            const defTurno = turni[t.codiceTurno];
-            console.log(`[DEBUG-ORE]     Lookup: turni["${t.codiceTurno}"] =`, defTurno);
-
-            if (!defTurno) {
-                console.log(`[DEBUG-ORE]     ❌ Turno "${t.codiceTurno}" non trovato in mappa turni!`);
-            } else {
-                // Supporta sia formato vecchio (orario) che nuovo (ingresso/uscita)
-                let oreT = 0;
-
-                if (defTurno.orario) {
-                    // Formato vecchio: "07:00 – 14:00"
-                    const match = defTurno.orario.match(/(\d+):00\s*[–-]\s*(\d+):00/);
-                    if (match) {
-                        oreT = parseInt(match[2]) - parseInt(match[1]);
-                        console.log(`[DEBUG-ORE]     ✅ orario="${defTurno.orario}" → ${oreT}h`);
-                    }
-                } else if (defTurno.ingresso && defTurno.uscita) {
-                    // Formato nuovo: ingresso: "07:00", uscita: "14:00"
-                    const ingressoMatch = defTurno.ingresso.match(/(\d+):(\d+)/);
-                    const uscitaMatch = defTurno.uscita.match(/(\d+):(\d+)/);
-
-                    if (ingressoMatch && uscitaMatch) {
-                        const ingressoOra = parseInt(ingressoMatch[1]);
-                        const uscitaOra = parseInt(uscitaMatch[1]);
-                        oreT = uscitaOra - ingressoOra;
-                        console.log(`[DEBUG-ORE]     ✅ ingresso="${defTurno.ingresso}", uscita="${defTurno.uscita}" → ${oreT}h`);
-                    }
-                } else {
-                    console.log(`[DEBUG-ORE]     ❌ Turno senza orario/ingresso-uscita:`, Object.keys(defTurno));
-                }
-
-                if (oreT > 0) {
-                    ore += oreT;
-                }
-            }
+            console.log(`[DEBUG-ORE]   Giorno ${t.giorno}: ${t.codiceTurno} = ${minutiToOreMinuti(minuti)} (${minuti} minuti)`);
         }
     });
 
-    console.log(`[DEBUG-ORE]   Totale ore settimana: ${ore}`);
+    // Converti in ore decimali per compatibilità con il resto del sistema
+    const ore = Math.round((minutiTotali / 60) * 10) / 10;
+
+    console.log(`[DEBUG-ORE]   Totale settimana: ${ore}h (${minutiTotali} minuti)`);
     return ore;
 }
 

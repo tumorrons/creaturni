@@ -11,6 +11,7 @@
 import { valutaRegolaCustom } from '../regole-custom.js';
 import { getState } from '../state.js';
 import { caricaTurno } from '../storage.js';
+import { calcolaMinutiTurno } from '../turni.js';
 
 console.log('📊 [AUTO-SCORING] Modulo caricato correttamente');
 
@@ -64,14 +65,15 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
     // 5. ORE SETTIMANALI (penalità forte se supera)
     const maxOre = profilo.vincoli?.maxOreSettimanali;
     if (maxOre && context.oreSettimana !== undefined) {
-        const { turni } = getState();
-        const oreTurno = calcolaOreTurno(codiceTurno, turni);
+        // Usa funzione centralizzata che gestisce correttamente tutti i tipi di turno
+        const minutiTurno = calcolaMinutiTurno(codiceTurno);
+        const oreTurno = minutiTurno / 60;
         const nuovoTotale = context.oreSettimana + oreTurno;
 
         if (nuovoTotale > maxOre) {
             const eccesso = nuovoTotale - maxOre;
             breakdown.oreSettimanali = -20;
-            motivazioni.push(`Supererebbe ore settimanali (${nuovoTotale}/${maxOre}, +${eccesso}h)`);
+            motivazioni.push(`Supererebbe ore settimanali (${nuovoTotale.toFixed(1)}/${maxOre}, +${eccesso.toFixed(1)}h)`);
         }
     }
 
@@ -134,28 +136,6 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
         motivazioni,
         confidenza
     };
-}
-
-/**
- * Calcola ore di un turno dalle definizioni
- *
- * @param {string} codiceTurno
- * @param {Object} turni - Dizionario turni da state
- * @returns {number} - Ore (default 8 se orario non parsabile)
- */
-function calcolaOreTurno(codiceTurno, turni) {
-    const turno = turni[codiceTurno];
-    if (!turno || !turno.orario) return 8; // Default 8 ore
-
-    // Parsing orario tipo "07:00 – 14:00"
-    const match = turno.orario.match(/(\d{2}):(\d{2})\s*[–-]\s*(\d{2}):(\d{2})/);
-    if (!match) return 8;
-
-    const [, h1, m1, h2, m2] = match;
-    const inizio = parseInt(h1) + parseInt(m1) / 60;
-    const fine = parseInt(h2) + parseInt(m2) / 60;
-
-    return fine - inizio;
 }
 
 /**
