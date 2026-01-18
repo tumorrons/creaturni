@@ -63,9 +63,14 @@ export function generaBozza(mese, anno, parametri = {}) {
 
             // 2a. Controlla se già assegnato (se soloGiorniVuoti = true)
             if (parametri.soloGiorniVuoti && !parametri.rigeneraTutto) {
-                const giaAssegnato = operatori.some(op =>
-                    caricaTurno(op, giorno, anno, mese) === `${ambulatorio}_${codiceTurno}`
-                );
+                const giaAssegnato = operatori.some(op => {
+                    const turnoCaricato = caricaTurno(op, giorno, anno, mese);
+                    // Controlla ENTRAMBI i formati:
+                    // - Nuovo formato autogeneration: "AMBULATORIO_TURNO" (es. "BUD_BU-S")
+                    // - Vecchio formato manuale: solo "TURNO" (es. "BU-S")
+                    return turnoCaricato === `${ambulatorio}_${codiceTurno}` ||
+                           turnoCaricato === codiceTurno;
+                });
 
                 if (giaAssegnato) {
                     console.log(`[AUTO-ENGINE]   ⏭️  Già assegnato, skip`);
