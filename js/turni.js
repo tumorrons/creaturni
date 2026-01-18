@@ -48,6 +48,11 @@ export function calcolaMinutiTurno(turnoCode) {
     const turno = turni[turnoCode];
     if (!turno) return 0;
 
+    // TURNI SPECIALI (ferie, permessi, malattia, etc.) → sempre 0 ore
+    if (turno.speciale) {
+        return 0;
+    }
+
     let totale = 0;
 
     // TURNI A SEGMENTI (spezzati / multi-sede)

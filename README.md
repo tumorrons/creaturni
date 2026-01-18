@@ -1,4 +1,4 @@
-# 🏥 Gestione Turni Ospedale v3.2
+# 🏥 Gestione Turni Ospedale v3.5
 
 Sistema modulare per la gestione dei turni ospedalieri.
 
@@ -115,6 +115,13 @@ Per importare in altro browser: copia il localStorage.
 
 ## 🔄 Changelog
 
+### v3.5 (2025-01-18) - Turni Speciali e Miglioramenti UI
+- ✅ Migliorato calcolo ore per turni speciali (ferie, permessi, etc.)
+- ✅ Separazione visiva turni normali/speciali in configurazione
+- ✅ Pulsanti rapidi per creare turni speciali comuni
+- ✅ Visualizzazione migliorata dei turni speciali nella barra
+- ✅ Fix gestione turni con ore=0
+
 ### v3.2 (2025-01-17) - Refactoring Modulare
 - ✅ Separazione codice in 15 moduli
 - ✅ Architettura a responsabilità separate
@@ -155,4 +162,4 @@ Per contribuire:
 
 ---
 
-**Ultima modifica:** 2025-01-17 | **Versione:** 3.2
+**Ultima modifica:** 2025-01-18 | **Versione:** 3.5

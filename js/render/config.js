@@ -150,66 +150,111 @@ function renderConfigAmbulatori(container) {
 function renderConfigTurni(container) {
     let box = document.createElement("div");
     box.className = "config-section config-turni";
+
+    // Separa turni normali e speciali
+    const turniNormali = Object.entries(turni).filter(([_, t]) => !t.speciale);
+    const turniSpeciali = Object.entries(turni).filter(([_, t]) => t.speciale);
+
     box.innerHTML = `<h4>⏰ Turni (${Object.keys(turni).length})</h4>`;
 
-    // Lista turni
-    let lista = document.createElement("ul");
-    lista.className = "turno-list";
+    // SEZIONE TURNI NORMALI
+    let sectionNormali = document.createElement("div");
+    sectionNormali.style.marginBottom = "20px";
+    sectionNormali.innerHTML = `<h5 style="color:#4caf50;margin-bottom:10px">📋 Turni Lavorativi (${turniNormali.length})</h5>`;
 
-    Object.entries(turni).forEach(([codice, turno]) => {
-        let item = document.createElement("li");
-        item.style.padding = "10px";
-        item.style.background = "#f5f5f5";
-        item.style.borderRadius = "4px";
-        item.style.marginBottom = "8px";
-        item.style.borderLeft = `5px solid ${turno.colore}`;
+    let listaNormali = document.createElement("ul");
+    listaNormali.className = "turno-list";
 
-        const oreCalcolate = calcolaOreTurno(codice);
-        const orarioDisplay = getOrarioDisplay(turno);
-        const badgeSpeciale = turno.speciale ? `<span style="background:#FF9800;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:8px">🏖️ SPECIALE</span>` : '';
-        const badgeBlocca = turno.bloccaGenerazione ? `<span style="background:#F44336;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:4px">🚫 BLOCCA AUTO</span>` : '';
-
-        item.innerHTML = `
-            <div style="display:flex;justify-content:space-between;align-items:start">
-                <div style="flex:1">
-                    <strong style="font-size:14px">${codice}</strong> — ${turno.nome}${badgeSpeciale}${badgeBlocca}
-                    <br>
-                    <small style="color:#666">
-                        ${turno.speciale ? '⚠️ Turno speciale (non conta ore lavorative)' : `🏥 ${ambulatori[turno.ambulatorio]?.nome || turno.ambulatorio || 'Non specificato'} • ⏰ ${orarioDisplay} • 📊 ${oreCalcolate} ore`}
-                    </small>
-                    ${turno.labelStampa ? `<br><small style="color:#999">Etichetta stampa: ${turno.labelStampa}</small>` : ''}
-                </div>
-                <div style="display:flex;gap:5px">
-                    <button class="config-btn config-add"
-                            onclick="window.modificaTurno('${codice}')"
-                            style="padding:4px 8px;font-size:11px">
-                        ✏️
-                    </button>
-                    <button class="config-btn config-remove"
-                            onclick="window.eliminaTurno('${codice}')"
-                            style="padding:4px 8px;font-size:11px">
-                        🗑️
-                    </button>
-                </div>
-            </div>
-        `;
-        lista.appendChild(item);
+    turniNormali.forEach(([codice, turno]) => {
+        listaNormali.appendChild(renderTurnoItem(codice, turno));
     });
 
-    box.appendChild(lista);
+    sectionNormali.appendChild(listaNormali);
 
-    // Bottone aggiungi turno
-    let btnAggiungi = document.createElement("button");
-    btnAggiungi.className = "config-btn config-add";
-    btnAggiungi.textContent = "➕ Aggiungi Nuovo Turno";
-    btnAggiungi.style.marginTop = "10px";
-    btnAggiungi.onclick = () => window.mostraFormTurno();
-    box.appendChild(btnAggiungi);
+    // Bottone aggiungi turno normale
+    let btnAggiungiNormale = document.createElement("button");
+    btnAggiungiNormale.className = "config-btn config-add";
+    btnAggiungiNormale.textContent = "➕ Aggiungi Turno Lavorativo";
+    btnAggiungiNormale.style.marginTop = "10px";
+    btnAggiungiNormale.onclick = () => window.mostraFormTurno();
+    sectionNormali.appendChild(btnAggiungiNormale);
+
+    box.appendChild(sectionNormali);
+
+    // SEZIONE TURNI SPECIALI
+    let sectionSpeciali = document.createElement("div");
+    sectionSpeciali.style.marginBottom = "20px";
+    sectionSpeciali.style.padding = "15px";
+    sectionSpeciali.style.background = "#fff3e0";
+    sectionSpeciali.style.borderRadius = "8px";
+    sectionSpeciali.innerHTML = `<h5 style="color:#ff9800;margin-top:0;margin-bottom:10px">🏖️ Turni Speciali (${turniSpeciali.length})</h5>
+        <p class="info-text" style="font-size:12px;margin-bottom:10px">I turni speciali (ferie, permessi, malattia, etc.) non contano nelle ore lavorative e bloccano la generazione automatica.</p>`;
+
+    let listaSpeciali = document.createElement("ul");
+    listaSpeciali.className = "turno-list";
+
+    turniSpeciali.forEach(([codice, turno]) => {
+        listaSpeciali.appendChild(renderTurnoItem(codice, turno));
+    });
+
+    sectionSpeciali.appendChild(listaSpeciali);
+
+    // Bottone aggiungi turno speciale
+    let btnAggiungiSpeciale = document.createElement("button");
+    btnAggiungiSpeciale.className = "config-btn";
+    btnAggiungiSpeciale.style.background = "#ff9800";
+    btnAggiungiSpeciale.textContent = "➕ Aggiungi Turno Speciale";
+    btnAggiungiSpeciale.style.marginTop = "10px";
+    btnAggiungiSpeciale.onclick = () => window.mostraFormTurnoSpeciale();
+    sectionSpeciali.appendChild(btnAggiungiSpeciale);
+
+    box.appendChild(sectionSpeciali);
 
     // Form turno (inizialmente nascosto)
     renderFormTurno(box);
 
     container.appendChild(box);
+}
+
+// Helper per renderizzare singolo item turno
+function renderTurnoItem(codice, turno) {
+    let item = document.createElement("li");
+    item.style.padding = "10px";
+    item.style.background = "#f5f5f5";
+    item.style.borderRadius = "4px";
+    item.style.marginBottom = "8px";
+    item.style.borderLeft = `5px solid ${turno.colore}`;
+
+    const oreCalcolate = calcolaOreTurno(codice);
+    const orarioDisplay = getOrarioDisplay(turno);
+    const badgeSpeciale = turno.speciale ? `<span style="background:#FF9800;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:8px">🏖️ SPECIALE</span>` : '';
+    const badgeBlocca = turno.bloccaGenerazione && !turno.speciale ? `<span style="background:#F44336;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:4px">🚫 BLOCCA AUTO</span>` : '';
+
+    item.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:start">
+            <div style="flex:1">
+                <strong style="font-size:14px">${codice}</strong> — ${turno.nome}${badgeSpeciale}${badgeBlocca}
+                <br>
+                <small style="color:#666">
+                    ${turno.speciale ? '⚠️ Turno speciale (non conta ore lavorative)' : `🏥 ${ambulatori[turno.ambulatorio]?.nome || turno.ambulatorio || 'Non specificato'} • ⏰ ${orarioDisplay} • 📊 ${oreCalcolate} ore`}
+                </small>
+                ${turno.labelStampa ? `<br><small style="color:#999">Etichetta stampa: ${turno.labelStampa}</small>` : ''}
+            </div>
+            <div style="display:flex;gap:5px">
+                <button class="config-btn config-add"
+                        onclick="window.modificaTurno('${codice}')"
+                        style="padding:4px 8px;font-size:11px">
+                    ✏️
+                </button>
+                <button class="config-btn config-remove"
+                        onclick="window.eliminaTurno('${codice}')"
+                        style="padding:4px 8px;font-size:11px">
+                    🗑️
+                </button>
+            </div>
+        </div>
+    `;
+    return item;
 }
 
 function renderFormTurno(container) {
@@ -586,6 +631,41 @@ window.mostraFormTurno = function(codice = null) {
         // Mostra sezione orari per turni normali
         window.toggleTurnoSpeciale();
     }
+
+    form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+};
+
+window.mostraFormTurnoSpeciale = function() {
+    const form = document.getElementById("form-turno");
+    form.style.display = "block";
+
+    // Popola select ambulatori
+    const selectAmb = document.getElementById("turno-ambulatorio");
+    selectAmb.innerHTML = '<option value="">— Seleziona ambulatorio —</option>';
+    Object.entries(ambulatori).forEach(([k, v]) => {
+        const opt = document.createElement("option");
+        opt.value = k;
+        opt.textContent = `${v.nome} (${k})`;
+        selectAmb.appendChild(opt);
+    });
+
+    // Pre-compila per turno speciale
+    document.getElementById("turno-edit-code").value = "";
+    document.getElementById("turno-codice").disabled = false;
+    document.getElementById("turno-codice").value = "";
+    document.getElementById("turno-nome").value = "";
+    document.getElementById("turno-ambulatorio").value = "";
+    document.getElementById("turno-colore").value = "#2196F3";  // Blu di default per turni speciali
+    document.getElementById("turno-label-stampa").value = "";
+    document.getElementById("turno-speciale").checked = true;  // Attiva checkbox speciale
+    document.getElementById("turno-blocca-generazione").checked = true;  // Attiva blocco auto
+    document.getElementById("turno-ingresso").value = "";
+    document.getElementById("turno-uscita").value = "";
+    document.getElementById("turno-pausa").value = 0;
+    document.getElementById("turno-sottrai-pausa").checked = true;
+
+    // Nascondi sezione orari
+    window.toggleTurnoSpeciale();
 
     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 };

@@ -126,58 +126,84 @@ export function rimuoviAmbulatorio(codice) {
 }
 
 // ============= TURNI =============
+
+// Turni speciali standard (da aggiungere automaticamente se mancano)
+const TURNI_SPECIALI_STANDARD = {
+    FERIE: {
+        nome: "Ferie",
+        colore: "#2196F3",
+        labelStampa: "FER",
+        speciale: true,
+        bloccaGenerazione: true,
+        ore: 0
+    },
+    PERMESSO: {
+        nome: "Permesso",
+        colore: "#FF5722",
+        labelStampa: "PER",
+        speciale: true,
+        bloccaGenerazione: true,
+        ore: 0
+    },
+    LEGGE_104: {
+        nome: "Legge 104",
+        colore: "#9C27B0",
+        labelStampa: "104",
+        speciale: true,
+        bloccaGenerazione: true,
+        ore: 0
+    },
+    MALATTIA: {
+        nome: "Malattia",
+        colore: "#F44336",
+        labelStampa: "MAL",
+        speciale: true,
+        bloccaGenerazione: true,
+        ore: 0
+    },
+    RECUPERO: {
+        nome: "Recupero",
+        colore: "#00BCD4",
+        labelStampa: "REC",
+        speciale: true,
+        bloccaGenerazione: true,
+        ore: 0
+    }
+};
+
 export function caricaTurni() {
     const tnr = localStorage.getItem("turni");
+    let turni = null;
+
     if (tnr) {
-        return JSON.parse(tnr);
+        turni = JSON.parse(tnr);
+
+        // MIGRAZIONE: Aggiungi turni speciali standard se mancano
+        let aggiornato = false;
+        for (const [codice, turnoSpeciale] of Object.entries(TURNI_SPECIALI_STANDARD)) {
+            if (!turni[codice]) {
+                console.log(`[MIGRAZIONE] Aggiunto turno speciale: ${codice}`);
+                turni[codice] = turnoSpeciale;
+                aggiornato = true;
+            }
+        }
+
+        // Salva se sono stati aggiunti turni
+        if (aggiornato) {
+            salvaTurni(turni);
+        }
+
+        return turni;
     } else {
+        // Prima installazione: crea defaults
         const defaults = {
             // Turni normali
             BM: { nome: "Mattino", colore: "#4caf50", ambulatorio: "BUD", orario: "07:00 – 14:00", labelStampa: "BM" },
             BP: { nome: "Pomeriggio", colore: "#ff9800", ambulatorio: "BUD", orario: "14:00 – 21:00", labelStampa: "BP" },
             BA: { nome: "Mattino", colore: "#9c27b0", ambulatorio: "BAR", orario: "07:00 – 14:00", labelStampa: "BA" },
 
-            // Turni speciali (assenze/permessi) - non contano ore, bloccano auto-generazione
-            FERIE: {
-                nome: "Ferie",
-                colore: "#2196F3",
-                labelStampa: "FER",
-                speciale: true,
-                bloccaGenerazione: true,
-                ore: 0
-            },
-            PERMESSO: {
-                nome: "Permesso",
-                colore: "#FF5722",
-                labelStampa: "PER",
-                speciale: true,
-                bloccaGenerazione: true,
-                ore: 0
-            },
-            LEGGE_104: {
-                nome: "Legge 104",
-                colore: "#9C27B0",
-                labelStampa: "104",
-                speciale: true,
-                bloccaGenerazione: true,
-                ore: 0
-            },
-            MALATTIA: {
-                nome: "Malattia",
-                colore: "#F44336",
-                labelStampa: "MAL",
-                speciale: true,
-                bloccaGenerazione: true,
-                ore: 0
-            },
-            RECUPERO: {
-                nome: "Recupero",
-                colore: "#00BCD4",
-                labelStampa: "REC",
-                speciale: true,
-                bloccaGenerazione: true,
-                ore: 0
-            }
+            // Turni speciali
+            ...TURNI_SPECIALI_STANDARD
         };
         salvaTurni(defaults);
         return defaults;
