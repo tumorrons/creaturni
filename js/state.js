@@ -39,17 +39,177 @@ export let ambulatori = {
     BAR: { nome: "Baricella" }
 };
 export let turni = {
-    // Turni normali
-    BM: { nome: "Mattino", colore: "#4caf50", ambulatorio: "BUD", orario: "07:00 – 14:00", labelStampa: "BM" },
-    BP: { nome: "Pomeriggio", colore: "#ff9800", ambulatorio: "BUD", orario: "14:00 – 21:00", labelStampa: "BP" },
-    BA: { nome: "Mattino", colore: "#9c27b0", ambulatorio: "BAR", orario: "07:00 – 14:00", labelStampa: "BA" },
+    // ========================================
+    // TURNI NORMALI (singoli)
+    // ========================================
+    "BU-M": {
+        nome: "Mattino Budrio",
+        colore: "#4caf50",
+        ambulatorio: "BUD",
+        labelStampa: "BU-M",
+        ingresso: "07:00",
+        uscita: "13:36",
+        pausa: 0,
+        sottraiPausa: false
+    },
+    "BU-P": {
+        nome: "Pomeriggio Budrio",
+        colore: "#ff9800",
+        ambulatorio: "BUD",
+        labelStampa: "BU-P",
+        ingresso: "14:00",
+        uscita: "21:00",
+        pausa: 0,
+        sottraiPausa: false
+    },
+    "BU-S": {
+        nome: "Sabato Budrio",
+        colore: "#2196F3",
+        ambulatorio: "BUD",
+        labelStampa: "BU-S",
+        ingresso: "08:00",
+        uscita: "14:00",
+        pausa: 0,
+        sottraiPausa: false
+    },
+    "BU-DF": {
+        nome: "Domenica/Festivo Budrio",
+        colore: "#E91E63",
+        ambulatorio: "BUD",
+        labelStampa: "BU-DF",
+        ingresso: "08:00",
+        uscita: "11:00",
+        pausa: 0,
+        sottraiPausa: false
+    },
+    "BAR-M": {
+        nome: "Mattino Baricella",
+        colore: "#9c27b0",
+        ambulatorio: "BAR",
+        labelStampa: "BAR-M",
+        ingresso: "07:00",
+        uscita: "14:12",
+        pausa: 0,
+        sottraiPausa: false
+    },
+    "BAR-P": {
+        nome: "Pomeriggio Baricella",
+        colore: "#FF5722",
+        ambulatorio: "BAR",
+        labelStampa: "BAR-P",
+        ingresso: "14:00",
+        uscita: "21:00",
+        pausa: 0,
+        sottraiPausa: false
+    },
 
-    // Turni speciali (assenze/permessi)
+    // ========================================
+    // TURNI SEGMENTATI - SPEZZATI (con pausa)
+    // ========================================
+    "BU-LUNGA": {
+        nome: "Turno Lungo Budrio",
+        colore: "#8BC34A",
+        ambulatorio: "BUD",
+        labelStampa: "LUNGA",
+        sottraiPausa: true,
+        segmenti: [
+            {
+                ambulatorio: "BUD",
+                ingresso: "07:00",
+                uscita: "13:30",
+                pausa: 0
+            },
+            {
+                ambulatorio: "BUD",
+                ingresso: "14:00",
+                uscita: "16:00",
+                pausa: 0
+            }
+        ]
+    },
+
+    // ========================================
+    // TURNI SEGMENTATI - MULTI-SEDE
+    // ========================================
+    "BUD-BAR-M": {
+        nome: "Mattino Budrio+Baricella",
+        colore: "#00BCD4",
+        ambulatorio: "MULTI",  // Categoria speciale
+        labelStampa: "BB-M",
+        sottraiPausa: false,
+        segmenti: [
+            {
+                ambulatorio: "BUD",
+                ingresso: "08:00",
+                uscita: "10:00",
+                pausa: 0
+            },
+            {
+                ambulatorio: "BAR",
+                ingresso: "10:30",
+                uscita: "12:30",
+                pausa: 0
+            }
+        ]
+    },
+    "BUD-BAR-P": {
+        nome: "Pomeriggio Budrio+Baricella",
+        colore: "#FF9800",
+        ambulatorio: "MULTI",
+        labelStampa: "BB-P",
+        sottraiPausa: false,
+        segmenti: [
+            {
+                ambulatorio: "BUD",
+                ingresso: "14:00",
+                uscita: "16:00",
+                pausa: 0
+            },
+            {
+                ambulatorio: "BAR",
+                ingresso: "16:30",
+                uscita: "18:30",
+                pausa: 0
+            }
+        ]
+    },
+    "BAR-BUD-M": {
+        nome: "Mattino Baricella+Budrio",
+        colore: "#9C27B0",
+        ambulatorio: "MULTI",
+        labelStampa: "RB-M",
+        sottraiPausa: false,
+        segmenti: [
+            {
+                ambulatorio: "BAR",
+                ingresso: "08:00",
+                uscita: "10:00",
+                pausa: 0
+            },
+            {
+                ambulatorio: "BUD",
+                ingresso: "10:30",
+                uscita: "12:30",
+                pausa: 0
+            }
+        ]
+    },
+
+    // ========================================
+    // TURNI SPECIALI (assenze/permessi)
+    // ========================================
     FERIE: { nome: "Ferie", colore: "#2196F3", labelStampa: "FER", speciale: true, bloccaGenerazione: true, ore: 0 },
     PERMESSO: { nome: "Permesso", colore: "#FF5722", labelStampa: "PER", speciale: true, bloccaGenerazione: true, ore: 0 },
     LEGGE_104: { nome: "Legge 104", colore: "#9C27B0", labelStampa: "104", speciale: true, bloccaGenerazione: true, ore: 0 },
     MALATTIA: { nome: "Malattia", colore: "#F44336", labelStampa: "MAL", speciale: true, bloccaGenerazione: true, ore: 0 },
-    RECUPERO: { nome: "Recupero", colore: "#00BCD4", labelStampa: "REC", speciale: true, bloccaGenerazione: true, ore: 0 }
+    RECUPERO: { nome: "Recupero", colore: "#00BCD4", labelStampa: "REC", speciale: true, bloccaGenerazione: true, ore: 0 },
+
+    // ========================================
+    // RETROCOMPATIBILITÀ (vecchi codici)
+    // ========================================
+    BM: { nome: "Mattino (old)", colore: "#4caf50", ambulatorio: "BUD", orario: "07:00 – 14:00", labelStampa: "BM", ore: 6.6 },
+    BP: { nome: "Pomeriggio (old)", colore: "#ff9800", ambulatorio: "BUD", orario: "14:00 – 21:00", labelStampa: "BP", ore: 7 },
+    BA: { nome: "Mattino BAR (old)", colore: "#9c27b0", ambulatorio: "BAR", orario: "07:00 – 14:00", labelStampa: "BA", ore: 7.2 }
 };
 
 // Setters per aggiornare lo stato

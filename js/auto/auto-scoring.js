@@ -53,12 +53,42 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
     // ========================================
     // 1️⃣ SEDE (più importante di tutto)
     // ========================================
-    if (profilo.sedePrincipale === ambulatorio) {
-        breakdown.sede = 100;
-        motivazioni.push(`💯 Sede primaria (${ambulatorio})`);
-    } else if (profilo.sediSecondarie && profilo.sediSecondarie.includes(ambulatorio)) {
-        breakdown.sede = 40;
-        motivazioni.push(`👍 Sede secondaria (${ambulatorio})`);
+    // Per turni MULTI-SEDE, calcoliamo score massimo tra tutti gli ambulatori dei segmenti
+    const { turni } = getState();
+    const turnoObj = turni[codiceTurno];
+
+    if (turnoObj && turnoObj.segmenti && Array.isArray(turnoObj.segmenti) && turnoObj.segmenti.length > 0) {
+        // Turno con segmenti: valuta ogni ambulatorio presente
+        let maxScore = 0;
+        const ambulatoriPresenti = new Set();
+
+        turnoObj.segmenti.forEach(seg => {
+            if (seg.ambulatorio) {
+                ambulatoriPresenti.add(seg.ambulatorio);
+
+                if (profilo.sedePrincipale === seg.ambulatorio) {
+                    maxScore = Math.max(maxScore, 100);
+                } else if (profilo.sediSecondarie && profilo.sediSecondarie.includes(seg.ambulatorio)) {
+                    maxScore = Math.max(maxScore, 40);
+                }
+            }
+        });
+
+        breakdown.sede = maxScore;
+        if (maxScore === 100) {
+            motivazioni.push(`💯 Sede primaria in segmento`);
+        } else if (maxScore === 40) {
+            motivazioni.push(`👍 Sede secondaria in segmento`);
+        }
+    } else {
+        // Turno singolo: usa ambulatorio parametro
+        if (profilo.sedePrincipale === ambulatorio) {
+            breakdown.sede = 100;
+            motivazioni.push(`💯 Sede primaria (${ambulatorio})`);
+        } else if (profilo.sediSecondarie && profilo.sediSecondarie.includes(ambulatorio)) {
+            breakdown.sede = 40;
+            motivazioni.push(`👍 Sede secondaria (${ambulatorio})`);
+        }
     }
     // Altrimenti sede = 0 (sede non compatibile)
 

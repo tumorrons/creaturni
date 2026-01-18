@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Turni Segmentati</title>
+    <style>
+        body { font-family: monospace; padding: 20px; }
+        .test { margin: 10px 0; padding: 10px; background: #f0f0f0; }
+        .pass { background: #d4edda; }
+        .fail { background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test Turni Segmentati v4.0</h1>
+    <div id="results"></div>
+
+    <script type="module">
+        import { calcolaMinutiTurno, minutiToOreMinuti } from './js/turni.js';
+        import { turni } from './js/state.js';
+
+        const results = document.getElementById('results');
+
+        function test(nome, codiceTurno, minutiAttesi) {
+            const minuti = calcolaMinutiTurno(codiceTurno);
+            const ore = minutiToOreMinuti(minuti);
+            const pass = minuti === minutiAttesi;
+
+            const turno = turni[codiceTurno];
+            const desc = turno ? turno.nome : 'N/A';
+
+            const div = document.createElement('div');
+            div.className = `test ${pass ? 'pass' : 'fail'}`;
+            div.innerHTML = `
+                <strong>${pass ? '✅' : '❌'} ${nome}</strong><br>
+                Codice: <code>${codiceTurno}</code> - ${desc}<br>
+                Calcolati: ${minuti} minuti (${ore})<br>
+                Attesi: ${minutiAttesi} minuti (${minutiToOreMinuti(minutiAttesi)})<br>
+                ${turno && turno.segmenti ? `Segmenti: ${turno.segmenti.length}` : 'Turno singolo'}
+            `;
+            results.appendChild(div);
+        }
+
+        // Test turni normali
+        test('Mattino Budrio', 'BU-M', 396);  // 6h 36min
+        test('Pomeriggio Budrio', 'BU-P', 420);  // 7h
+        test('Sabato Budrio', 'BU-S', 360);  // 6h
+        test('Domenica/Festivo', 'BU-DF', 180);  // 3h
+        test('Mattino Baricella', 'BAR-M', 432);  // 7h 12min
+        test('Pomeriggio Baricella', 'BAR-P', 420);  // 7h
+
+        // Test turni segmentati - spezzati
+        // BU-LUNGA: 07:00-13:30 (390min) + 14:00-16:00 (120min) = 510min (8h 30min)
+        test('Turno Lungo Budrio', 'BU-LUNGA', 510);
+
+        // Test turni multi-sede
+        // BUD-BAR-M: 08:00-10:00 (120min) + 10:30-12:30 (120min) = 240min (4h)
+        test('Mattino Budrio+Baricella', 'BUD-BAR-M', 240);
+        test('Pomeriggio Budrio+Baricella', 'BUD-BAR-P', 240);
+        test('Mattino Baricella+Budrio', 'BAR-BUD-M', 240);
+
+        // Test turni speciali
+        test('Ferie', 'FERIE', 0);
+        test('Permesso', 'PERMESSO', 0);
+
+        // Test retrocompatibilità
+        test('Mattino OLD', 'BM', 396);  // usa campo ore: 6.6h
+        test('Pomeriggio OLD', 'BP', 420);  // usa campo ore: 7h
+
+        console.log('✅ Test completati');
+    </script>
+</body>
+</html>
