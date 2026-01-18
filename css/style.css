@@ -1,0 +1,429 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    background: #f4f6f8;
+}
+
+header {
+    background: #1e88e5;
+    color: white;
+    padding: 10px;
+}
+
+header h2 {
+    margin: 5px 0;
+}
+
+nav button {
+    margin-right: 5px;
+    padding: 8px 12px;
+    background: #1565c0;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+nav button:hover {
+    background: #0d47a1;
+}
+
+section {
+    padding: 15px;
+}
+
+/* TABELLA EXCEL */
+table {
+    border-collapse: collapse;
+    width: 100%;
+    background: white;
+    margin-top: 15px;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    text-align: center;
+    padding: 8px 4px;
+    font-size: 12px;
+}
+
+th {
+    background: #e3e3e3;
+    font-weight: bold;
+}
+
+.operator {
+    background: #f9f9f9;
+    font-weight: bold;
+    position: sticky;
+    left: 0;
+    min-width: 120px;
+    text-align: left;
+    padding-left: 8px;
+}
+
+/* TURNI */
+.turno-btn {
+    padding: 8px 12px;
+    margin: 3px;
+    border: none;
+    cursor: pointer;
+    color: white;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.turno-btn:hover {
+    opacity: 0.8;
+    transform: scale(1.05);
+}
+
+.turno-attivo {
+    outline: 3px solid #000;
+    box-shadow: 0 0 8px rgba(0,0,0,0.5);
+}
+
+/* NASCONDI */
+.hidden {
+    display: none;
+}
+
+footer {
+    padding: 10px;
+    background: #ddd;
+    border-top: 1px solid #999;
+    margin-top: 20px;
+}
+
+h3 {
+    margin-top: 0;
+    color: #1e88e5;
+}
+
+h4 {
+    color: #424242;
+    margin-top: 15px;
+}
+
+.filtro-turni {
+    margin-bottom: 15px;
+}
+
+.filtro-turni button {
+    padding: 6px 10px;
+    margin-right: 5px;
+    background: #e0e0e0;
+    border: 1px solid #999;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+.filtro-turni button:hover {
+    background: #d0d0d0;
+}
+
+.filtro-turni button.attivo {
+    background: #1e88e5;
+    color: white;
+    font-weight: bold;
+}
+
+.config-section {
+    margin: 20px 0;
+    padding: 15px;
+    border-radius: 4px;
+}
+
+.config-info {
+    background: #e3f2fd;
+}
+
+.config-turni {
+    background: #f3e5f5;
+}
+
+.config-azioni {
+    background: #fff3e0;
+}
+
+.config-note {
+    background: #fce4ec;
+    font-size: 12px;
+    color: #666;
+}
+
+button.config-btn {
+    padding: 8px 12px;
+    margin-right: 5px;
+    margin-bottom: 5px;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    color: white;
+    font-weight: bold;
+}
+
+button.config-btn:hover {
+    opacity: 0.9;
+}
+
+button.config-add {
+    background: #4caf50;
+}
+
+button.config-remove {
+    background: #f44336;
+}
+
+button.config-clear {
+    background: #9e9e9e;
+}
+
+.turno-list {
+    list-style: none;
+    padding: 0;
+}
+
+.turno-list li {
+    margin: 8px 0;
+}
+
+.turno-color {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+.operatori-list {
+    list-style: none;
+    padding: 0;
+    columns: 2;
+}
+
+.operatori-list li {
+    margin: 5px 0;
+    background: #f5f5f5;
+    padding: 5px 10px;
+    border-radius: 3px;
+    break-inside: avoid;
+}
+
+.info-text {
+    color: #666;
+    font-size: 13px;
+    margin: 10px 0;
+}
+
+.info-text small {
+    color: #999;
+}
+
+.summary-info {
+    margin-top: 10px;
+    font-size: 12px;
+    color: #666;
+    font-style: italic;
+}
+
+.no-data {
+    color: #999;
+    font-style: italic;
+}
+
+/* GRIGLIA ANNO */
+@media (min-width: 1200px) {
+    #anno > div[style*="display: grid"] {
+        grid-template-columns: repeat(4, 1fr) !important;
+    }
+}
+
+@media (max-width: 1199px) and (min-width: 768px) {
+    #anno > div[style*="display: grid"] {
+        grid-template-columns: repeat(3, 1fr) !important;
+    }
+}
+
+@media (max-width: 767px) {
+    #anno > div[style*="display: grid"] {
+        grid-template-columns: repeat(2, 1fr) !important;
+    }
+}
+
+/* GRIGLIA ANNO */
+.note-badge {
+    display: inline-block;
+    margin-left: 4px;
+    padding: 1px 5px;
+    font-size: 9px;
+    background: #ffeb3b;
+    color: #000;
+    border-radius: 3px;
+    font-weight: bold;
+    border: 1px solid #fbc02d;
+}
+
+/* STAMPA */
+@media print {
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    header, nav, footer, .nav-controls, button, #turniBar, .info-text, #noteInline {
+        display: none !important;
+    }
+
+    body {
+        background: white;
+        font-size: 11px;
+        color: #000;
+        margin: 0;
+        padding: 0;
+    }
+
+    section {
+        padding: 0;
+    }
+
+    h2 {
+        text-align: center;
+        margin-bottom: 5px;
+        margin-top: 0;
+        font-size: 16px;
+    }
+
+    h4 {
+        text-align: center;
+        margin-top: 0;
+        margin-bottom: 15px;
+        font-weight: normal;
+        font-size: 12px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 10px;
+        page-break-inside: avoid;
+    }
+
+    th {
+        background: #f0f0f0 !important;
+        color: #000 !important;
+        font-weight: bold;
+    }
+
+    th, td {
+        border: 1px solid #000;
+        padding: 3px;
+        text-align: center;
+        vertical-align: middle;
+        font-size: 10px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    td:first-child {
+        text-align: left;
+        font-weight: bold;
+        white-space: nowrap;
+        padding: 4px 6px;
+    }
+
+    .print-block {
+        page-break-after: always;
+        padding: 15px;
+    }
+
+    .print-legenda {
+        margin-top: 20px;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 6px 20px;
+        font-size: 10px;
+        page-break-inside: avoid;
+    }
+
+    .print-note {
+        margin-top: 30px;
+        border-top: 1px solid #000;
+        padding-top: 15px;
+        font-size: 10px;
+        page-break-inside: avoid;
+    }
+}
+
+/* NAVIGAZIONE */
+.nav-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 15px;
+    margin-bottom: 20px;
+    padding: 15px;
+    background: #f5f5f5;
+    border-radius: 4px;
+}
+
+.nav-controls button {
+    padding: 8px 12px;
+    background: #1e88e5;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 4px;
+    font-weight: bold;
+    transition: all 0.2s;
+}
+
+.nav-controls button:hover:not(:disabled) {
+    background: #1565c0;
+    transform: scale(1.05);
+}
+
+.nav-controls button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.nav-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #1e88e5;
+    min-width: 150px;
+    text-align: center;
+}
+
+.nav-info {
+    color: #666;
+    font-size: 12px;
+}
+
+/* ============= TURNI AUTO-GENERATI (BOZZA) ============= */
+/* Pattern a righe diagonali per turni generati automaticamente */
+.turno-auto-preview {
+    position: relative;
+}
+
+.turno-auto-preview::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+
+    /* Righe diagonali bianche semi-trasparenti */
+    background-image: repeating-linear-gradient(
+        135deg,
+        rgba(255, 255, 255, 0.25) 0,
+        rgba(255, 255, 255, 0.25) 8px,
+        transparent 8px,
+        transparent 16px
+    );
+}
