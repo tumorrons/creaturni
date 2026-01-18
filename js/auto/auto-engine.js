@@ -40,6 +40,9 @@ export function generaBozza(mese, anno, parametri = {}) {
     // Calcola quanti giorni ha il mese
     const giorniMese = new Date(anno, mese + 1, 0).getDate();
 
+    // 🗺️ MAPPA COPERTURA GLOBALE (tracking stato x2, x3, etc.)
+    const coperturaCorrente = new Map();
+
     // Itera su ogni giorno del mese
     for (let giorno = 1; giorno <= giorniMese; giorno++) {
         console.log(`[AUTO-ENGINE] Analisi giorno ${giorno}/${giorniMese}`);
@@ -47,11 +50,28 @@ export function generaBozza(mese, anno, parametri = {}) {
         // 1. Identifica quali turni servono questo giorno (da regole copertura)
         const turniNecessari = identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, turni);
 
+        // 📊 ORDINA SLOT PER PRIORITÀ (x2, x3 prima)
+        turniNecessari.sort((a, b) => {
+            if (b.richiesti !== a.richiesti) {
+                return b.richiesti - a.richiesti;
+            }
+            return 0; // a parità, ordine naturale
+        });
+
         // 2. Per ogni turno necessario, trova il miglior operatore
         for (const slot of turniNecessari) {
-            const { ambulatorio, codiceTurno, motivazione } = slot;
+            const { ambulatorio, codiceTurno, motivazione, richiesti } = slot;
 
             console.log(`[AUTO-ENGINE]   Slot: ${ambulatorio} ${codiceTurno} (${motivazione})`);
+
+            // Inizializza copertura per questo slot se non esiste
+            const slotKey = `${anno}-${mese}-${giorno}|${ambulatorio}|${codiceTurno}`;
+            if (!coperturaCorrente.has(slotKey)) {
+                coperturaCorrente.set(slotKey, {
+                    coperti: 0,
+                    richiesti: richiesti || 1
+                });
+            }
 
             // 2a. Controlla se già assegnato (se soloGiorniVuoti = true)
             if (parametri.soloGiorniVuoti && !parametri.rigeneraTutto) {
@@ -74,7 +94,9 @@ export function generaBozza(mese, anno, parametri = {}) {
                 codiceTurno,
                 ambulatorio,
                 parametri,
-                bozza  // Passa bozza corrente per calcolare ore simulate
+                bozza,
+                coperturaCorrente,
+                slotKey
             );
 
             if (risultato) {
@@ -93,6 +115,13 @@ export function generaBozza(mese, anno, parametri = {}) {
 
                 bozza.turni.push(turnoGenerato);
                 bozza.metadata.statistiche.turniGenerati++;
+
+                // 🔥 AGGIORNA COPERTURA (questo è il cuore della soluzione)
+                const stato = coperturaCorrente.get(slotKey);
+                if (stato) {
+                    stato.coperti += 1;
+                    console.log(`[AUTO-ENGINE]   📊 Copertura aggiornata: ${stato.coperti}/${stato.richiesti}`);
+                }
 
                 console.log(`[AUTO-ENGINE]   ✅ Assegnato a ${profilo.nome} (score: ${totale}, confidenza: ${(confidenza * 100).toFixed(0)}%)`);
             } else {
@@ -151,7 +180,8 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, tur
                 slots.push({
                     ambulatorio: mancante.ambulatorio,
                     codiceTurno: mancante.turno,
-                    motivazione: `${avviso.descrizione} (${mancante.presenti}/${mancante.richiesti})`
+                    motivazione: `${avviso.descrizione} (${mancante.presenti}/${mancante.richiesti})`,
+                    richiesti: mancante.richiesti  // 🔥 Campo critico per tracking x2, x3, etc.
                 });
             }
         });
@@ -171,9 +201,11 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, tur
  * @param {string} ambulatorio
  * @param {Object} parametri
  * @param {Object} bozza - Bozza corrente con turni già generati
+ * @param {Map} coperturaCorrente - Mappa copertura in tempo reale
+ * @param {string} slotKey - Chiave dello slot corrente
  * @returns {Object|null} - { profilo, totale, breakdown, motivazioni, confidenza } o null
  */
-function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza) {
+function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, coperturaCorrente, slotKey) {
     // 1. Filtra operatori validi (non inattivi, non assenti, etc.)
     const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese });
 
@@ -183,6 +215,9 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
         return null;
     }
 
+    // Ottieni stato copertura corrente per questo slot
+    const statoCopertura = coperturaCorrente.get(slotKey);
+
     // 2. Calcola score per ogni operatore
     const scored = operatoriValidi.map(profilo => {
         // Costruisci context includendo turni già generati nella bozza
@@ -190,14 +225,40 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
 
         console.log(`[DEBUG]   ${profilo.nome}: oreSettimana=${context.oreSettimana}, turniNelMese=${context.turniNelMese}`);
 
-        // Calcola score
+        // Calcola score BASE
         const result = calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio, context);
 
-        console.log(`[DEBUG]   ${profilo.nome}: score=${result.totale}, breakdown=`, result.breakdown);
+        // 🎯 BONUS COMPLETAMENTO COPERTURA (x2, x3, etc.)
+        let bonusCompletamento = 0;
+        if (statoCopertura && statoCopertura.richiesti > 1) {
+            const { coperti, richiesti } = statoCopertura;
+            const mancanti = richiesti - coperti;
+
+            if (mancanti > 0) {
+                // Bonus proporzionale a quanto manca
+                bonusCompletamento = mancanti * 15;
+
+                // Bonus EXTRA se questo slot CHIUDE la copertura (es. da 1/2 → 2/2)
+                if (coperti + 1 === richiesti) {
+                    bonusCompletamento += 25;
+                }
+
+                result.breakdown.bonusCompletamento = bonusCompletamento;
+                result.motivazioni.push(`🎯 Completa copertura (${coperti + 1}/${richiesti})`);
+            }
+        }
+
+        // Score totale con bonus
+        const scoreFinale = result.totale + bonusCompletamento;
+
+        console.log(`[DEBUG]   ${profilo.nome}: score=${scoreFinale} (base=${result.totale}, bonus=${bonusCompletamento}), breakdown=`, result.breakdown);
 
         return {
             profilo,
-            ...result
+            totale: scoreFinale,
+            breakdown: result.breakdown,
+            motivazioni: result.motivazioni,
+            confidenza: result.confidenza
         };
     });
 

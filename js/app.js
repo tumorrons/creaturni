@@ -29,7 +29,7 @@ import {
  * Inizializza l'applicazione
  */
 function init() {
-    console.log("🏥 Inizializzazione Gestione Turni Ospedale v3.6");
+    console.log("🏥 Inizializzazione Gestione Turni Ospedale v3.7");
 
     // 1. Inizializza stato
     initState();

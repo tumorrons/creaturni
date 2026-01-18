@@ -1,4 +1,4 @@
-# 🏥 Gestione Turni Ospedale - Architettura v3.6
+# 🏥 Gestione Turni Ospedale - Architettura v3.7
 
 ## 📁 Struttura del Progetto
 

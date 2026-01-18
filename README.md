@@ -1,4 +1,4 @@
-# 🏥 Gestione Turni Ospedale v3.6
+# 🏥 Gestione Turni Ospedale v3.7
 
 Sistema modulare per la gestione dei turni ospedalieri.
 
