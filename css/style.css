@@ -2,6 +2,7 @@ body {
     font-family: Arial, sans-serif;
     margin: 0;
     background: #f4f6f8;
+    padding-bottom: 80px; /* Spazio per footer fisso */
 }
 
 header {
@@ -90,10 +91,18 @@ th {
 }
 
 footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 100%;
     padding: 10px;
     background: #ddd;
     border-top: 1px solid #999;
-    margin-top: 20px;
+    z-index: 1000;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    overflow-x: auto; /* Scroll orizzontale se troppi pulsanti */
+    overflow-y: hidden;
+    white-space: nowrap; /* Previene wrap dei pulsanti */
 }
 
 h3 {
