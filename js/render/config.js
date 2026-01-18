@@ -166,16 +166,16 @@ function renderConfigTurni(container) {
 
         const oreCalcolate = calcolaOreTurno(codice);
         const orarioDisplay = getOrarioDisplay(turno);
+        const badgeSpeciale = turno.speciale ? `<span style="background:#FF9800;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:8px">🏖️ SPECIALE</span>` : '';
+        const badgeBlocca = turno.bloccaGenerazione ? `<span style="background:#F44336;color:white;padding:2px 6px;border-radius:3px;font-size:10px;margin-left:4px">🚫 BLOCCA AUTO</span>` : '';
 
         item.innerHTML = `
             <div style="display:flex;justify-content:space-between;align-items:start">
                 <div style="flex:1">
-                    <strong style="font-size:14px">${codice}</strong> — ${turno.nome}
+                    <strong style="font-size:14px">${codice}</strong> — ${turno.nome}${badgeSpeciale}${badgeBlocca}
                     <br>
                     <small style="color:#666">
-                        🏥 ${ambulatori[turno.ambulatorio]?.nome || turno.ambulatorio || 'Non specificato'}
-                        • ⏰ ${orarioDisplay}
-                        • 📊 ${oreCalcolate} ore
+                        ${turno.speciale ? '⚠️ Turno speciale (non conta ore lavorative)' : `🏥 ${ambulatori[turno.ambulatorio]?.nome || turno.ambulatorio || 'Non specificato'} • ⏰ ${orarioDisplay} • 📊 ${oreCalcolate} ore`}
                     </small>
                     ${turno.labelStampa ? `<br><small style="color:#999">Etichetta stampa: ${turno.labelStampa}</small>` : ''}
                 </div>
@@ -260,7 +260,23 @@ function renderFormTurno(container) {
             <small style="color:#666">Testo breve da mostrare nelle stampe (se vuoto, usa il codice)</small>
         </div>
 
-        <div style="margin-bottom:10px;padding:10px;background:#f0f0f0;border-radius:4px">
+        <div style="margin-bottom:10px;padding:10px;background:#fff3e0;border-radius:4px">
+            <label style="display:inline-flex;align-items:center;cursor:pointer;margin-bottom:8px">
+                <input type="checkbox" id="turno-speciale" style="margin-right:8px" onchange="window.toggleTurnoSpeciale()">
+                <span style="font-weight:bold">🏖️ Turno speciale (ferie, permessi, etc.)</span>
+            </label>
+            <br>
+            <small style="color:#666">I turni speciali non hanno orari e non contano nelle ore lavorative</small>
+            <br><br>
+            <label style="display:inline-flex;align-items:center;cursor:pointer">
+                <input type="checkbox" id="turno-blocca-generazione" style="margin-right:8px">
+                <span style="font-weight:bold">🚫 Blocca generazione automatica</span>
+            </label>
+            <br>
+            <small style="color:#666">Operatori con questo turno non riceveranno assegnazioni automatiche</small>
+        </div>
+
+        <div id="turno-orario-section" style="margin-bottom:10px;padding:10px;background:#f0f0f0;border-radius:4px">
             <label style="display:block;font-weight:bold;margin-bottom:8px">⏰ Orario Turno:</label>
 
             <div style="margin-bottom:8px">
@@ -544,10 +560,14 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-ambulatorio").value = turno.ambulatorio || "";
         document.getElementById("turno-colore").value = turno.colore || "#4caf50";
         document.getElementById("turno-label-stampa").value = turno.labelStampa || "";
+        document.getElementById("turno-speciale").checked = turno.speciale || false;
+        document.getElementById("turno-blocca-generazione").checked = turno.bloccaGenerazione || false;
         document.getElementById("turno-ingresso").value = turno.ingresso || "";
         document.getElementById("turno-uscita").value = turno.uscita || "";
         document.getElementById("turno-pausa").value = turno.pausa || 0;
         document.getElementById("turno-sottrai-pausa").checked = turno.sottraiPausa ?? true;
+        // Attiva/disattiva sezioni in base al tipo di turno
+        window.toggleTurnoSpeciale();
     } else {
         // Modalità nuovo
         document.getElementById("turno-edit-code").value = "";
@@ -557,10 +577,14 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-ambulatorio").value = "";
         document.getElementById("turno-colore").value = "#4caf50";
         document.getElementById("turno-label-stampa").value = "";
+        document.getElementById("turno-speciale").checked = false;
+        document.getElementById("turno-blocca-generazione").checked = false;
         document.getElementById("turno-ingresso").value = "";
         document.getElementById("turno-uscita").value = "";
         document.getElementById("turno-pausa").value = 0;
         document.getElementById("turno-sottrai-pausa").checked = true;
+        // Mostra sezione orari per turni normali
+        window.toggleTurnoSpeciale();
     }
 
     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -577,6 +601,8 @@ window.salvaTurnoUI = function() {
     const ambulatorio = document.getElementById("turno-ambulatorio").value;
     const colore = document.getElementById("turno-colore").value;
     const labelStampa = document.getElementById("turno-label-stampa").value.trim().toUpperCase();
+    const speciale = document.getElementById("turno-speciale").checked;
+    const bloccaGenerazione = document.getElementById("turno-blocca-generazione").checked;
     const ingresso = document.getElementById("turno-ingresso").value;
     const uscita = document.getElementById("turno-uscita").value;
     const pausa = parseInt(document.getElementById("turno-pausa").value) || 0;
@@ -592,14 +618,17 @@ window.salvaTurnoUI = function() {
         return;
     }
 
-    if (ingresso && !validaOrario(ingresso)) {
-        alert("Formato orario ingresso non valido (usa HH:MM)");
-        return;
-    }
+    // Per turni normali, valida orari
+    if (!speciale) {
+        if (ingresso && !validaOrario(ingresso)) {
+            alert("Formato orario ingresso non valido (usa HH:MM)");
+            return;
+        }
 
-    if (uscita && !validaOrario(uscita)) {
-        alert("Formato orario uscita non valido (usa HH:MM)");
-        return;
+        if (uscita && !validaOrario(uscita)) {
+            alert("Formato orario uscita non valido (usa HH:MM)");
+            return;
+        }
     }
 
     const turno = {
@@ -607,10 +636,13 @@ window.salvaTurnoUI = function() {
         colore,
         ambulatorio: ambulatorio || null,
         labelStampa: labelStampa || codice,
-        ingresso: ingresso || null,
-        uscita: uscita || null,
-        pausa,
-        sottraiPausa
+        speciale,
+        bloccaGenerazione,
+        ingresso: (speciale ? null : (ingresso || null)),
+        uscita: (speciale ? null : (uscita || null)),
+        pausa: (speciale ? 0 : pausa),
+        sottraiPausa: (speciale ? false : sottraiPausa),
+        ore: (speciale ? 0 : undefined)  // Turni speciali hanno ore = 0
     };
 
     if (editCode) {
@@ -627,6 +659,26 @@ window.chiudiFormTurno = function() {
     const form = document.getElementById("form-turno");
     if (form) {
         form.style.display = "none";
+    }
+};
+
+window.toggleTurnoSpeciale = function() {
+    const speciale = document.getElementById("turno-speciale").checked;
+    const orarioSection = document.getElementById("turno-orario-section");
+    const ambulatorioInput = document.getElementById("turno-ambulatorio");
+    const bloccaGenerazioneCheckbox = document.getElementById("turno-blocca-generazione");
+
+    if (speciale) {
+        // Nascondi orario e ambulatorio per turni speciali
+        orarioSection.style.display = "none";
+        ambulatorioInput.disabled = true;
+        ambulatorioInput.value = "";
+        // Attiva automaticamente blocca generazione
+        bloccaGenerazioneCheckbox.checked = true;
+    } else {
+        // Mostra orario e ambulatorio per turni normali
+        orarioSection.style.display = "block";
+        ambulatorioInput.disabled = false;
     }
 };
 

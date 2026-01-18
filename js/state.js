@@ -39,9 +39,17 @@ export let ambulatori = {
     BAR: { nome: "Baricella" }
 };
 export let turni = {
+    // Turni normali
     BM: { nome: "Mattino", colore: "#4caf50", ambulatorio: "BUD", orario: "07:00 – 14:00", labelStampa: "BM" },
     BP: { nome: "Pomeriggio", colore: "#ff9800", ambulatorio: "BUD", orario: "14:00 – 21:00", labelStampa: "BP" },
-    BA: { nome: "Mattino", colore: "#9c27b0", ambulatorio: "BAR", orario: "07:00 – 14:00", labelStampa: "BA" }
+    BA: { nome: "Mattino", colore: "#9c27b0", ambulatorio: "BAR", orario: "07:00 – 14:00", labelStampa: "BA" },
+
+    // Turni speciali (assenze/permessi)
+    FERIE: { nome: "Ferie", colore: "#2196F3", labelStampa: "FER", speciale: true, bloccaGenerazione: true, ore: 0 },
+    PERMESSO: { nome: "Permesso", colore: "#FF5722", labelStampa: "PER", speciale: true, bloccaGenerazione: true, ore: 0 },
+    LEGGE_104: { nome: "Legge 104", colore: "#9C27B0", labelStampa: "104", speciale: true, bloccaGenerazione: true, ore: 0 },
+    MALATTIA: { nome: "Malattia", colore: "#F44336", labelStampa: "MAL", speciale: true, bloccaGenerazione: true, ore: 0 },
+    RECUPERO: { nome: "Recupero", colore: "#00BCD4", labelStampa: "REC", speciale: true, bloccaGenerazione: true, ore: 0 }
 };
 
 // Setters per aggiornare lo stato

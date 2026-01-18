@@ -174,7 +174,7 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, ambulatori, tur
  */
 function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza) {
     // 1. Filtra operatori validi (non inattivi, non assenti, etc.)
-    const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, {});
+    const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese });
 
     console.log(`[DEBUG] Giorno ${giorno} - Candidati validi: ${operatoriValidi.map(p => p.nome).join(', ')}`);
 

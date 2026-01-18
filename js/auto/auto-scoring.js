@@ -10,6 +10,7 @@
 
 import { valutaRegolaCustom } from '../regole-custom.js';
 import { getState } from '../state.js';
+import { caricaTurno } from '../storage.js';
 
 console.log('📊 [AUTO-SCORING] Modulo caricato correttamente');
 
@@ -30,7 +31,7 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
         sedePreferita: 0,
         turnoEvitato: 0,
         oreSettimanali: 0,
-        bilanciamentoOre: 0,  // Nuovo: favorisce distribuzione equa
+        bilanciamentoOre: 0,  // Favorisce distribuzione equa
         preferenzeCustom: 0,
         vincoliCustom: 0,
         totale: 0
@@ -120,7 +121,7 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
         breakdown.sedePreferita +
         breakdown.turnoEvitato +
         breakdown.oreSettimanali +
-        breakdown.bilanciamentoOre +  // Nuovo componente
+        breakdown.bilanciamentoOre +
         breakdown.preferenzeCustom +
         breakdown.vincoliCustom;
 
@@ -189,17 +190,37 @@ function scoreToConfidenza(score) {
  * @param {number} giorno
  * @param {string} codiceTurno
  * @param {string} ambulatorio
- * @param {Object} context
+ * @param {Object} context - Deve contenere { anno, mese }
  * @returns {Object[]} - Profili validi
  */
 export function filtraOperatoriValidi(profili, giorno, codiceTurno, ambulatorio, context) {
-    return profili.filter(profilo => {
-        // TODO: Filtra operatori in base a:
-        // - ferie/assenze per questo giorno
-        // - blacklist turni assoluta
-        // - altri vincoli hard
+    const { turni } = getState();
 
-        // Per ora: tutti gli operatori sono validi
+    return profili.filter(profilo => {
+        // 1. Controlla se operatore ha un turno speciale (ferie, permesso, etc.)
+        if (context.anno !== undefined && context.mese !== undefined) {
+            const turnoAssegnato = caricaTurno(profilo.id, giorno, context.anno, context.mese);
+
+            if (turnoAssegnato) {
+                // Estrai codice turno (può essere "AMB_TURNO" o solo "TURNO")
+                const codiceTurnoPuro = turnoAssegnato.includes('_')
+                    ? turnoAssegnato.split('_').pop()
+                    : turnoAssegnato;
+
+                const defTurno = turni[codiceTurnoPuro];
+
+                // Se il turno ha bloccaGenerazione: true, esclude l'operatore
+                if (defTurno && defTurno.bloccaGenerazione) {
+                    console.log(`[AUTO-SCORING] ❌ ${profilo.nome} ha ${defTurno.nome} il giorno ${giorno}`);
+                    return false;
+                }
+            }
+        }
+
+        // 2. Altri vincoli hard futuri:
+        // - blacklist turni assoluta
+        // - vincoli di ruolo/competenze
+
         return true;
     });
 }
