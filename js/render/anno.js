@@ -7,6 +7,7 @@ import { giorniNelMese, primoGiornoMese, getNomeMese, getNomiGiorniSettimana } f
 import { caricaTurno, caricaNota } from '../storage.js';
 import { calcolaOreOperatore, calcolaMinutiOperatore, getOrarioDettaglioTurno, calcolaOreTurno } from '../turni.js';
 import { getNomeOperatore, getIdOperatore } from '../profili.js';
+import { valutaAssegnazione, generaTooltipRegole, filtraWarning } from '../regole.js';
 
 export function renderAnno(anno = annoCorrente) {
     const container = document.getElementById("anno");
@@ -97,23 +98,23 @@ export function renderAnno(anno = annoCorrente) {
 function renderMiniMese(container, anno, mese, compatto = true) {
     const giorni = giorniNelMese(anno, mese);
     let table = document.createElement("table");
-    table.style.fontSize = compatto ? "9px" : "10px";
+    table.style.fontSize = compatto ? "10px" : "11px";
     table.style.width = "100%";
 
     let weekDays = getNomiGiorniSettimana();
     let primoGiorno = primoGiornoMese(anno, mese);
 
-    let thead = "<tr><th style='font-size:" + (compatto ? "9px" : "10px") + ";padding:2px'>Op.</th>";
+    let thead = "<tr><th style='font-size:" + (compatto ? "10px" : "11px") + ";padding:3px'>Op.</th>";
     for (let g = 1; g <= giorni; g++) {
         let dayOfWeek = (primoGiorno + g - 1) % 7;
         let dayLabel = weekDays[dayOfWeek];
         let isWeekend = dayOfWeek >= 5; // Sab=5, Dom=6
 
-        thead += `<th style="font-size:${compatto ? '8px' : '9px'};padding:2px;${isWeekend ? 'background:#ffe0e0' : ''}">
-            <span style="font-size:0.8em;color:#999">${dayLabel}</span><br>${g}
+        thead += `<th style="font-size:${compatto ? '9px' : '10px'};padding:3px;${isWeekend ? 'background:#ffe0e0;' : ''}">
+            <span style="font-size:0.85em;color:#666">${dayLabel}</span><br>${g}
         </th>`;
     }
-    thead += compatto ? "" : "<th style='font-size:9px;padding:2px'>Tot</th>";
+    thead += compatto ? "" : "<th style='font-size:10px;padding:3px'>Tot</th>";
     thead += "</tr>";
     table.innerHTML = thead;
 
@@ -132,33 +133,67 @@ function renderMiniMese(container, anno, mese, compatto = true) {
         const opNome = getNomeOperatore(op);
 
         let row = `<tr data-operatore="${opId}">
-            <td class="operator" style="font-size:${compatto ? '9px' : '10px'};padding:2px;text-align:left;min-width:${compatto ? '40px' : '60px'}">${compatto ? opNome.substring(0, 3) : opNome}</td>`;
+            <td class="operator" style="font-size:${compatto ? '10px' : '11px'};padding:3px;text-align:left;min-width:${compatto ? '50px' : '70px'}">${compatto ? opNome.substring(0, 5) : opNome}</td>`;
 
         for (let g = 1; g <= giorni; g++) {
             let turnoSalvato = caricaTurno(op, g, anno, mese);
             let nota = caricaNota(op, g, anno, mese);
-            let cellStyle = "cursor:pointer;padding:2px;";
+            let cellStyle = "cursor:pointer;padding:3px;";
 
-            if (turnoSalvato && turni[turnoSalvato]) {
-                cellStyle += `background:${turni[turnoSalvato].colore};color:white;font-weight:bold`;
+            // Estrai codice turno da formato "AMBULATORIO_TURNO" se necessario
+            let codiceTurno = turnoSalvato;
+            if (turnoSalvato && turnoSalvato.includes('_')) {
+                const parts = turnoSalvato.split('_');
+                codiceTurno = parts[parts.length - 1]; // Prende ultima parte (es. "BM" da "BUD_BM")
             }
 
+            if (turnoSalvato && turni[codiceTurno]) {
+                cellStyle += `background:${turni[codiceTurno].colore};color:white;font-weight:bold;`;
+            }
+
+            // Valuta regole per turni già assegnati (solo se operatore è un profilo completo)
+            let warningRegole = [];
+            if (turnoSalvato && typeof op === 'object' && op !== null) {
+                const context = {};
+                const risultati = valutaAssegnazione(op, turnoSalvato, g, anno, mese, context, turni);
+                warningRegole = filtraWarning(risultati);
+            }
+
+            // Bordo per note (giallo) o warning regole (rosso/arancione)
+            if (nota && nota.testo && warningRegole.length === 0) {
+                cellStyle += "box-shadow:inset 0 0 0 2px #ff9800;";
+            } else if (warningRegole.length > 0) {
+                const haErrori = warningRegole.some(w => w.gravita === 'error');
+                if (haErrori) {
+                    cellStyle += "box-shadow:inset 0 0 0 2px #d32f2f;"; // Rosso per errori
+                } else {
+                    cellStyle += "box-shadow:inset 0 0 0 2px #ff9800;"; // Arancione per warning
+                }
+                // Se c'è anche una nota, bordo doppio
+                if (nota && nota.testo) {
+                    cellStyle += "box-shadow:inset 0 0 0 2px #ff9800, inset 0 0 0 4px #fbc02d;";
+                }
+            }
+
+            let contenuto = codiceTurno || "";
             if (nota && nota.testo) {
-                cellStyle += ";box-shadow:inset 0 0 0 2px #ff9800";
-            }
-
-            let contenuto = turnoSalvato || "";
-            if (nota && nota.testo && !compatto) {
-                contenuto += `<span class="note-badge" style="font-size:7px">N</span>`;
+                contenuto += `<span class="note-badge" style="font-size:7px;margin-left:2px">N</span>`;
             }
 
             let tooltipText = "";
-            if (turnoSalvato && turni[turnoSalvato]) {
+            if (turnoSalvato && turni[codiceTurno]) {
                 const orarioDettaglio = getOrarioDettaglioTurno(turnoSalvato, ambulatori);
                 const oreCalcolate = calcolaOreTurno(turnoSalvato);
-                tooltipText = `${turni[turnoSalvato].nome} • ${orarioDettaglio} • ${oreCalcolate}h`;
+                tooltipText = `${turni[codiceTurno].nome} • ${orarioDettaglio} • ${oreCalcolate}h`;
+
+                // Aggiungi warning regole al tooltip
+                if (warningRegole.length > 0) {
+                    const tooltipRegole = generaTooltipRegole(warningRegole);
+                    tooltipText += `\n\n${tooltipRegole}`;
+                }
+
                 if (nota && nota.testo) {
-                    tooltipText += `\n📝 ${nota.testo}`;
+                    tooltipText += `\n\n📝 ${nota.testo}`;
                 }
             } else if (nota && nota.testo) {
                 tooltipText = nota.testo;
@@ -168,7 +203,7 @@ function renderMiniMese(container, anno, mese, compatto = true) {
         }
 
         if (!compatto) {
-            row += `<td style="font-size:9px;padding:2px;${styleOre}">${oreOperatore}${iconaWarning}</td>`;
+            row += `<td style="font-size:10px;padding:3px;${styleOre}">${oreOperatore}${iconaWarning}</td>`;
         }
 
         row += "</tr>";
