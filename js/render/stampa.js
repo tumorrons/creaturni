@@ -26,7 +26,7 @@ export function renderStampa(anno = annoCorrente, mese = meseCorrente) {
 
     // Opzioni stampa
     let opzioniStampa = document.createElement("div");
-    opzioniStampa.className = "config-section config-azioni";
+    opzioniStampa.className = "config-section config-azioni print-options";
 
     // Costruisci opzioni ambulatori
     let opzioniAmbulatori = '<option value="">Tutti gli ambulatori</option>';

@@ -344,7 +344,7 @@ button.config-clear {
         print-color-adjust: exact !important;
     }
 
-    header, nav, footer, .nav-controls, button, #turniBar, .info-text, #noteInline {
+    header, nav, footer, .nav-controls, button, #turniBar, .info-text, #noteInline, .print-options {
         display: none !important;
     }
 
