@@ -321,6 +321,15 @@ function renderFormTurno(container) {
             <small style="color:#666">Operatori con questo turno non riceveranno assegnazioni automatiche</small>
         </div>
 
+        <div style="margin-bottom:10px;padding:10px;background:#e3f2fd;border-radius:4px">
+            <label style="display:inline-flex;align-items:center;cursor:pointer;margin-bottom:8px">
+                <input type="checkbox" id="turno-segmentato" style="margin-right:8px" onchange="window.toggleTurnoSegmentato()">
+                <span style="font-weight:bold">✂️ Turno segmentato (spezzato o multi-sede)</span>
+            </label>
+            <br>
+            <small style="color:#666">Turni con più segmenti temporali o in ambulatori diversi (es: 8-13 poi 14-16, oppure 2h Budrio + 2h Baricella)</small>
+        </div>
+
         <div id="turno-orario-section" style="margin-bottom:10px;padding:10px;background:#f0f0f0;border-radius:4px">
             <label style="display:block;font-weight:bold;margin-bottom:8px">⏰ Orario Turno:</label>
 
@@ -348,6 +357,19 @@ function renderFormTurno(container) {
                     <span>Sottrai pausa dalle ore lavorative</span>
                 </label>
             </div>
+        </div>
+
+        <div id="turno-segmenti-section" style="display:none;margin-bottom:10px;padding:10px;background:#e8f5e9;border-radius:4px">
+            <label style="display:block;font-weight:bold;margin-bottom:8px">✂️ Segmenti Turno:</label>
+            <small style="color:#666;display:block;margin-bottom:10px">Aggiungi più segmenti per creare turni spezzati o multi-sede</small>
+
+            <div id="segmenti-lista" style="margin-bottom:10px">
+                <!-- I segmenti verranno aggiunti dinamicamente qui -->
+            </div>
+
+            <button type="button" class="config-btn config-add" onclick="window.aggiungiSegmento()" style="margin-top:5px">
+                ➕ Aggiungi Segmento
+            </button>
         </div>
 
         <div style="margin-top:15px;display:flex;gap:8px">
@@ -602,17 +624,49 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-codice").value = codice;
         document.getElementById("turno-codice").disabled = true;
         document.getElementById("turno-nome").value = turno.nome || "";
-        document.getElementById("turno-ambulatorio").value = turno.ambulatorio || "";
         document.getElementById("turno-colore").value = turno.colore || "#4caf50";
         document.getElementById("turno-label-stampa").value = turno.labelStampa || "";
         document.getElementById("turno-speciale").checked = turno.speciale || false;
         document.getElementById("turno-blocca-generazione").checked = turno.bloccaGenerazione || false;
-        document.getElementById("turno-ingresso").value = turno.ingresso || "";
-        document.getElementById("turno-uscita").value = turno.uscita || "";
-        document.getElementById("turno-pausa").value = turno.pausa || 0;
-        document.getElementById("turno-sottrai-pausa").checked = turno.sottraiPausa ?? true;
+
+        // Controlla se il turno ha segmenti
+        const haSegmenti = turno.segmenti && Array.isArray(turno.segmenti) && turno.segmenti.length > 0;
+        document.getElementById("turno-segmentato").checked = haSegmenti;
+
+        if (haSegmenti) {
+            // Turno segmentato: carica i segmenti
+            document.getElementById("turno-sottrai-pausa").checked = turno.sottraiPausa ?? true;
+            // Pulisci lista segmenti
+            document.getElementById("segmenti-lista").innerHTML = "";
+            segmentoCounter = 0;
+            // Carica ogni segmento
+            turno.segmenti.forEach((seg, idx) => {
+                window.aggiungiSegmento();
+                // Popola i campi del segmento appena aggiunto
+                const segmentiAmb = document.querySelectorAll(".segmento-ambulatorio");
+                const segmentiIng = document.querySelectorAll(".segmento-ingresso");
+                const segmentiUsc = document.querySelectorAll(".segmento-uscita");
+                const segmentiPau = document.querySelectorAll(".segmento-pausa");
+
+                if (segmentiAmb[idx]) segmentiAmb[idx].value = seg.ambulatorio || "";
+                if (segmentiIng[idx]) segmentiIng[idx].value = seg.ingresso || "";
+                if (segmentiUsc[idx]) segmentiUsc[idx].value = seg.uscita || "";
+                if (segmentiPau[idx]) segmentiPau[idx].value = seg.pausa || 0;
+            });
+        } else {
+            // Turno normale
+            document.getElementById("turno-ambulatorio").value = turno.ambulatorio || "";
+            document.getElementById("turno-ingresso").value = turno.ingresso || "";
+            document.getElementById("turno-uscita").value = turno.uscita || "";
+            document.getElementById("turno-pausa").value = turno.pausa || 0;
+            document.getElementById("turno-sottrai-pausa").checked = turno.sottraiPausa ?? true;
+        }
+
         // Attiva/disattiva sezioni in base al tipo di turno
         window.toggleTurnoSpeciale();
+        if (haSegmenti) {
+            window.toggleTurnoSegmentato();
+        }
     } else {
         // Modalità nuovo
         document.getElementById("turno-edit-code").value = "";
@@ -623,11 +677,15 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-colore").value = "#4caf50";
         document.getElementById("turno-label-stampa").value = "";
         document.getElementById("turno-speciale").checked = false;
+        document.getElementById("turno-segmentato").checked = false;
         document.getElementById("turno-blocca-generazione").checked = false;
         document.getElementById("turno-ingresso").value = "";
         document.getElementById("turno-uscita").value = "";
         document.getElementById("turno-pausa").value = 0;
         document.getElementById("turno-sottrai-pausa").checked = true;
+        // Pulisci segmenti
+        document.getElementById("segmenti-lista").innerHTML = "";
+        segmentoCounter = 0;
         // Mostra sezione orari per turni normali
         window.toggleTurnoSpeciale();
     }
@@ -682,6 +740,7 @@ window.salvaTurnoUI = function() {
     const colore = document.getElementById("turno-colore").value;
     const labelStampa = document.getElementById("turno-label-stampa").value.trim().toUpperCase();
     const speciale = document.getElementById("turno-speciale").checked;
+    const segmentato = document.getElementById("turno-segmentato").checked;
     const bloccaGenerazione = document.getElementById("turno-blocca-generazione").checked;
     const ingresso = document.getElementById("turno-ingresso").value;
     const uscita = document.getElementById("turno-uscita").value;
@@ -698,8 +757,64 @@ window.salvaTurnoUI = function() {
         return;
     }
 
-    // Per turni normali, valida orari
-    if (!speciale) {
+    const turno = {
+        nome,
+        colore,
+        labelStampa: labelStampa || codice,
+        speciale,
+        bloccaGenerazione
+    };
+
+    // Gestione turni segmentati
+    if (segmentato && !speciale) {
+        // Raccogli tutti i segmenti
+        const segmenti = [];
+        const segmentiAmb = document.querySelectorAll(".segmento-ambulatorio");
+        const segmentiIng = document.querySelectorAll(".segmento-ingresso");
+        const segmentiUsc = document.querySelectorAll(".segmento-uscita");
+        const segmentiPau = document.querySelectorAll(".segmento-pausa");
+
+        for (let i = 0; i < segmentiAmb.length; i++) {
+            const amb = segmentiAmb[i].value;
+            const ing = segmentiIng[i].value;
+            const usc = segmentiUsc[i].value;
+            const pau = parseInt(segmentiPau[i].value) || 0;
+
+            if (!amb) {
+                alert(`Segmento ${i + 1}: Seleziona un ambulatorio`);
+                return;
+            }
+
+            if (!ing || !usc) {
+                alert(`Segmento ${i + 1}: Inserisci orario ingresso e uscita`);
+                return;
+            }
+
+            if (!validaOrario(ing) || !validaOrario(usc)) {
+                alert(`Segmento ${i + 1}: Formato orario non valido`);
+                return;
+            }
+
+            segmenti.push({
+                ambulatorio: amb,
+                ingresso: ing,
+                uscita: usc,
+                pausa: pau
+            });
+        }
+
+        if (segmenti.length === 0) {
+            alert("Aggiungi almeno un segmento per turno segmentato");
+            return;
+        }
+
+        // Turno segmentato: usa categoria MULTI
+        turno.ambulatorio = "MULTI";
+        turno.segmenti = segmenti;
+        turno.sottraiPausa = sottraiPausa;
+    }
+    // Turni normali (non segmentati)
+    else if (!speciale) {
         if (ingresso && !validaOrario(ingresso)) {
             alert("Formato orario ingresso non valido (usa HH:MM)");
             return;
@@ -709,21 +824,22 @@ window.salvaTurnoUI = function() {
             alert("Formato orario uscita non valido (usa HH:MM)");
             return;
         }
-    }
 
-    const turno = {
-        nome,
-        colore,
-        ambulatorio: ambulatorio || null,
-        labelStampa: labelStampa || codice,
-        speciale,
-        bloccaGenerazione,
-        ingresso: (speciale ? null : (ingresso || null)),
-        uscita: (speciale ? null : (uscita || null)),
-        pausa: (speciale ? 0 : pausa),
-        sottraiPausa: (speciale ? false : sottraiPausa),
-        ore: (speciale ? 0 : undefined)  // Turni speciali hanno ore = 0
-    };
+        turno.ambulatorio = ambulatorio || null;
+        turno.ingresso = ingresso || null;
+        turno.uscita = uscita || null;
+        turno.pausa = pausa;
+        turno.sottraiPausa = sottraiPausa;
+    }
+    // Turni speciali
+    else {
+        turno.ambulatorio = null;
+        turno.ingresso = null;
+        turno.uscita = null;
+        turno.pausa = 0;
+        turno.sottraiPausa = false;
+        turno.ore = 0;
+    }
 
     if (editCode) {
         aggiornaTurno(codice, turno);
@@ -745,20 +861,125 @@ window.chiudiFormTurno = function() {
 window.toggleTurnoSpeciale = function() {
     const speciale = document.getElementById("turno-speciale").checked;
     const orarioSection = document.getElementById("turno-orario-section");
+    const segmentiSection = document.getElementById("turno-segmenti-section");
+    const segmentatoCheckbox = document.getElementById("turno-segmentato");
     const ambulatorioInput = document.getElementById("turno-ambulatorio");
     const bloccaGenerazioneCheckbox = document.getElementById("turno-blocca-generazione");
 
     if (speciale) {
-        // Nascondi orario e ambulatorio per turni speciali
+        // Nascondi orario e segmenti per turni speciali
         orarioSection.style.display = "none";
+        segmentiSection.style.display = "none";
+        segmentatoCheckbox.checked = false;
+        segmentatoCheckbox.disabled = true;
         ambulatorioInput.disabled = true;
         ambulatorioInput.value = "";
         // Attiva automaticamente blocca generazione
         bloccaGenerazioneCheckbox.checked = true;
     } else {
-        // Mostra orario e ambulatorio per turni normali
-        orarioSection.style.display = "block";
+        // Riabilita checkbox segmentato
+        segmentatoCheckbox.disabled = false;
         ambulatorioInput.disabled = false;
+        // Mostra orario solo se non segmentato
+        if (!segmentatoCheckbox.checked) {
+            orarioSection.style.display = "block";
+        }
+    }
+};
+
+window.toggleTurnoSegmentato = function() {
+    const segmentato = document.getElementById("turno-segmentato").checked;
+    const orarioSection = document.getElementById("turno-orario-section");
+    const segmentiSection = document.getElementById("turno-segmenti-section");
+    const ambulatorioInput = document.getElementById("turno-ambulatorio");
+
+    if (segmentato) {
+        // Nascondi orario singolo, mostra segmenti
+        orarioSection.style.display = "none";
+        segmentiSection.style.display = "block";
+        // Imposta ambulatorio su MULTI per turni segmentati
+        ambulatorioInput.value = "";
+        ambulatorioInput.disabled = true;
+        // Aggiungi primo segmento se non ce ne sono
+        const lista = document.getElementById("segmenti-lista");
+        if (lista.children.length === 0) {
+            window.aggiungiSegmento();
+        }
+    } else {
+        // Mostra orario singolo, nascondi segmenti
+        orarioSection.style.display = "block";
+        segmentiSection.style.display = "none";
+        ambulatorioInput.disabled = false;
+        // Pulisci segmenti
+        document.getElementById("segmenti-lista").innerHTML = "";
+    }
+};
+
+let segmentoCounter = 0;
+
+window.aggiungiSegmento = function() {
+    const lista = document.getElementById("segmenti-lista");
+    const index = segmentoCounter++;
+
+    const segmentoDiv = document.createElement("div");
+    segmentoDiv.id = `segmento-${index}`;
+    segmentoDiv.style.cssText = "margin-bottom:10px;padding:10px;background:#fff;border:2px solid #4caf50;border-radius:4px";
+
+    // Costruisci opzioni ambulatori
+    let opzioniAmb = '<option value="">— Seleziona ambulatorio —</option>';
+    Object.entries(ambulatori).forEach(([cod, amb]) => {
+        opzioniAmb += `<option value="${cod}">${amb.nome} (${cod})</option>`;
+    });
+
+    segmentoDiv.innerHTML = `
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <strong>Segmento ${lista.children.length + 1}</strong>
+            <button type="button" class="config-btn config-remove" onclick="window.rimuoviSegmento(${index})" style="padding:4px 8px;font-size:12px">
+                ✖ Rimuovi
+            </button>
+        </div>
+
+        <div style="margin-bottom:8px">
+            <label style="display:block;margin-bottom:5px">Ambulatorio:</label>
+            <select class="segmento-ambulatorio" data-index="${index}" style="padding:8px;border:1px solid #ccc;border-radius:4px;width:100%">
+                ${opzioniAmb}
+            </select>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr 100px;gap:8px;margin-bottom:8px">
+            <div>
+                <label style="display:block;margin-bottom:5px">Ingresso:</label>
+                <input type="time" class="segmento-ingresso" data-index="${index}"
+                       style="padding:8px;border:1px solid #ccc;border-radius:4px;width:100%">
+            </div>
+            <div>
+                <label style="display:block;margin-bottom:5px">Uscita:</label>
+                <input type="time" class="segmento-uscita" data-index="${index}"
+                       style="padding:8px;border:1px solid #ccc;border-radius:4px;width:100%">
+            </div>
+            <div>
+                <label style="display:block;margin-bottom:5px">Pausa (min):</label>
+                <input type="number" class="segmento-pausa" data-index="${index}" value="0" min="0" max="120"
+                       style="padding:8px;border:1px solid #ccc;border-radius:4px;width:100%">
+            </div>
+        </div>
+    `;
+
+    lista.appendChild(segmentoDiv);
+};
+
+window.rimuoviSegmento = function(index) {
+    const segmento = document.getElementById(`segmento-${index}`);
+    if (segmento) {
+        segmento.remove();
+        // Rinumera i segmenti rimasti
+        const lista = document.getElementById("segmenti-lista");
+        Array.from(lista.children).forEach((seg, i) => {
+            const strongTag = seg.querySelector("strong");
+            if (strongTag) {
+                strongTag.textContent = `Segmento ${i + 1}`;
+            }
+        });
     }
 };
 
