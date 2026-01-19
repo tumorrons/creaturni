@@ -275,9 +275,26 @@ function renderLegendaStampa(container, ambulatorioFiltro = "") {
     legenda.innerHTML = `<strong style="font-size:11px;margin-bottom:8px;display:block">Legenda Turni:</strong>`;
 
     Object.entries(turni).forEach(([code, turno]) => {
-        // Se c'è un filtro, mostra solo i turni dell'ambulatorio selezionato
-        if (ambulatorioFiltro && turno.ambulatorio !== ambulatorioFiltro) {
-            return;
+        // Se c'è un filtro ambulatorio, applica logica di filtraggio intelligente
+        if (ambulatorioFiltro) {
+            // Turni speciali: mostrali sempre (FERIE, PERMESSO, etc.)
+            if (turno.speciale) {
+                // Mostra sempre i turni speciali
+            }
+            // Turni con segmenti (multi-sede o spezzati)
+            else if (turno.segmenti && Array.isArray(turno.segmenti)) {
+                // Mostra il turno se ALMENO un segmento appartiene all'ambulatorio filtrato
+                const haSegmentoFiltrato = turno.segmenti.some(seg =>
+                    seg.ambulatorio === ambulatorioFiltro
+                );
+                if (!haSegmentoFiltrato) {
+                    return; // Skip questo turno
+                }
+            }
+            // Turni normali (singoli)
+            else if (turno.ambulatorio !== ambulatorioFiltro) {
+                return; // Skip questo turno
+            }
         }
 
         let item = document.createElement("div");
