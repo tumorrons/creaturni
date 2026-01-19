@@ -240,7 +240,8 @@ function renderTabellaMeseStampa(container, anno, mese, ambulatorioFiltro = "") 
 
                 // Se c'è un filtro ambulatorio, mostra solo turni di quell'ambulatorio
                 if (!ambulatorioFiltro || ambTurno === ambulatorioFiltro) {
-                    cellStyle = `background:${turno.colore}!important;color:white!important;font-weight:bold`;
+                    const coloreEffettivo = turno.coloreStampa || turno.colore;
+                    cellStyle = `background:${coloreEffettivo}!important;color:white!important;font-weight:bold`;
                     contenuto = turno.labelStampa || codiceTurno;
                 } else {
                     contenuto = "";
@@ -301,8 +302,9 @@ function renderLegendaStampa(container, ambulatorioFiltro = "") {
         item.style.display = "flex";
         item.style.alignItems = "center";
         item.style.gap = "8px";
+        const coloreEffettivo = turno.coloreStampa || turno.colore;
         item.innerHTML = `
-            <span style="display:inline-block;width:30px;height:16px;background:${turno.colore};border:1px solid #000;border-radius:2px"></span>
+            <span style="display:inline-block;width:30px;height:16px;background:${coloreEffettivo};border:1px solid #000;border-radius:2px"></span>
             <strong>${turno.labelStampa || code}</strong> = ${turno.nome} (${getOrarioDettaglioTurno(code, ambulatori)}) • ${calcolaOreTurno(code)}h
         `;
         legenda.appendChild(item);

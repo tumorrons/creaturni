@@ -305,6 +305,13 @@ function renderFormTurno(container) {
             <small style="color:#666">Testo breve da mostrare nelle stampe (se vuoto, usa il codice)</small>
         </div>
 
+        <div style="margin-bottom:10px">
+            <label style="display:block;font-weight:bold;margin-bottom:5px">Colore Stampa (opzionale):</label>
+            <input type="color" id="turno-colore-stampa" value=""
+                   style="padding:4px;border:1px solid #ccc;border-radius:4px;width:100px;height:40px">
+            <small style="color:#666">Colore da usare nelle stampe (se vuoto, usa il colore del turno)</small>
+        </div>
+
         <div style="margin-bottom:10px;padding:10px;background:#fff3e0;border-radius:4px">
             <label style="display:inline-flex;align-items:center;cursor:pointer;margin-bottom:8px">
                 <input type="checkbox" id="turno-speciale" style="margin-right:8px" onchange="window.toggleTurnoSpeciale()">
@@ -648,6 +655,7 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-nome").value = turno.nome || "";
         document.getElementById("turno-colore").value = turno.colore || "#4caf50";
         document.getElementById("turno-label-stampa").value = turno.labelStampa || "";
+        document.getElementById("turno-colore-stampa").value = turno.coloreStampa || "";
         document.getElementById("turno-speciale").checked = turno.speciale || false;
         document.getElementById("turno-blocca-generazione").checked = turno.bloccaGenerazione || false;
 
@@ -711,6 +719,7 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-ambulatorio").value = "";
         document.getElementById("turno-colore").value = "#4caf50";
         document.getElementById("turno-label-stampa").value = "";
+        document.getElementById("turno-colore-stampa").value = "";
         document.getElementById("turno-speciale").checked = false;
         document.getElementById("turno-segmentato").checked = false;
         document.getElementById("turno-blocca-generazione").checked = false;
@@ -753,6 +762,7 @@ window.mostraFormTurnoSpeciale = function() {
     document.getElementById("turno-ambulatorio").value = "";
     document.getElementById("turno-colore").value = "#2196F3";  // Blu di default per turni speciali
     document.getElementById("turno-label-stampa").value = "";
+    document.getElementById("turno-colore-stampa").value = "";
     document.getElementById("turno-speciale").checked = true;  // Attiva checkbox speciale
     document.getElementById("turno-blocca-generazione").checked = true;  // Attiva blocco auto
     document.getElementById("turno-ingresso").value = "";
@@ -780,6 +790,7 @@ window.salvaTurnoUI = function() {
     const ambulatorio = document.getElementById("turno-ambulatorio").value;
     const colore = document.getElementById("turno-colore").value;
     const labelStampa = document.getElementById("turno-label-stampa").value.trim().toUpperCase();
+    const coloreStampa = document.getElementById("turno-colore-stampa").value;
     const speciale = document.getElementById("turno-speciale").checked;
     const segmentato = document.getElementById("turno-segmentato").checked;
     const bloccaGenerazione = document.getElementById("turno-blocca-generazione").checked;
@@ -802,6 +813,7 @@ window.salvaTurnoUI = function() {
         nome,
         colore,
         labelStampa: labelStampa || codice,
+        coloreStampa: coloreStampa || null,
         speciale,
         bloccaGenerazione
     };
