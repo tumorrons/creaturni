@@ -13,7 +13,7 @@ import { calcolaScoreOperatore, filtraOperatoriValidi } from './auto-scoring.js'
 import { getState } from '../state.js';
 import { caricaTurno } from '../storage.js';
 import { caricaRegole } from '../coverage.js';
-import { espandiRegoleV3inV4, getRegoleGiorno } from '../coverage-v4.js';
+import { espandiRegoleV3inV4, getRegoleGiorno, contaAssegnazioniMensili } from '../coverage-v4.js';
 import { calcolaMinutiTurno, minutiToOreMinuti } from '../turni.js';
 
 console.log('⚙️ [AUTO-ENGINE] Modulo caricato correttamente (v4.0 - sistema regole con priorità)');
@@ -88,7 +88,8 @@ export function generaBozza(mese, anno, parametri = {}) {
                 ambulatorio,
                 parametri,
                 bozza,
-                priorita
+                priorita,
+                slot.limiteAssegnazioniMensili || null  // Passa limite mensile se presente
             );
 
             if (risultato) {
@@ -190,9 +191,10 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4) {
  * @param {Object} parametri
  * @param {Object} bozza - Bozza corrente con turni già generati
  * @param {number} priorita - Priorità dello slot (informativa, non influenza score)
+ * @param {number|null} limiteAssegnazioniMensili - Max assegnazioni mensili per operatore (null = nessun limite)
  * @returns {Object|null} - { profilo, totale, breakdown, motivazioni, confidenza } o null
  */
-function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, priorita) {
+function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, priorita, limiteAssegnazioniMensili = null) {
     // 1. Filtra operatori validi (non inattivi, non assenti, etc.)
     const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese });
 
@@ -219,8 +221,28 @@ function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambu
         return null;
     }
 
-    // 3. Calcola score per ogni operatore (solo quelli senza doppi)
-    const scored = operatoriSenzaDoppi.map(profilo => {
+    // 🔒 2b. VINCOLO HARD: Rispetta limite assegnazioni mensili (se specificato dalla regola)
+    let operatoriFinali = operatoriSenzaDoppi;
+    if (limiteAssegnazioniMensili !== null && limiteAssegnazioniMensili > 0) {
+        operatoriFinali = operatoriSenzaDoppi.filter(profilo => {
+            const count = contaAssegnazioniMensili(profilo, codiceTurno, anno, mese, bozza.turni);
+            const raggiunto = count >= limiteAssegnazioniMensili;
+            if (raggiunto) {
+                console.log(`[AUTO-ENGINE]   🚫 ${profilo.nome} escluso: raggiunto limite mensile ${codiceTurno} (${count}/${limiteAssegnazioniMensili})`);
+            }
+            return !raggiunto;
+        });
+
+        console.log(`[DEBUG] Dopo filtro limiti mensili: ${operatoriFinali.map(p => p.nome).join(', ')}`);
+
+        if (operatoriFinali.length === 0) {
+            console.log(`[AUTO-ENGINE]   ⚠️ Nessun operatore disponibile: tutti hanno raggiunto il limite mensile`);
+            return null;
+        }
+    }
+
+    // 3. Calcola score per ogni operatore
+    const scored = operatoriFinali.map(profilo => {
         // Costruisci context includendo turni già generati nella bozza
         const context = costruisciContext(profilo, giorno, mese, anno, codiceTurno, ambulatorio, bozza);
 

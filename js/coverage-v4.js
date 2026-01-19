@@ -13,6 +13,8 @@
  */
 
 import { regolaApplicaAGiorno } from './coverage.js';
+import { giorniNelMese } from './calendar.js';
+import { caricaTurno } from './storage.js';
 
 /**
  * Schema regola v4 (slot singolo)
@@ -22,10 +24,12 @@ import { regolaApplicaAGiorno } from './coverage.js';
  * @property {string} descrizione - Descrizione testuale
  * @property {string} codiceTurno - Codice turno (es. "BU-M")
  * @property {string} ambulatorio - Sede (es. "BUD")
- * @property {number} priorita - Priorità (100 = massima)
+ * @property {number} priorita - Priorità (100 = massima, 0 = normale, negativa = bassa)
  * @property {boolean} obbligatoria - Se false, genera solo warning
  * @property {Object} quando - Condizione temporale (stesso formato v3)
  * @property {boolean} attiva - Regola attiva/disattiva
+ * @property {number|null} limiteAssegnazioniMensili - Max assegnazioni mensili per operatore (null = nessun limite)
+ * @property {string} tipoRegola - Tipo: "normale", "filler" (usa per riempire ore), "last_resort" (copri per ultimo)
  */
 
 /**
@@ -65,6 +69,8 @@ export function espandiRegoleV3inV4(regoleV3, prioritaBase = 100) {
                     obbligatoria: regolaV3.severita === "warning",
                     quando: regolaV3.quando,
                     attiva: true,
+                    limiteAssegnazioniMensili: requisito.limiteAssegnazioniMensili || null,
+                    tipoRegola: requisito.tipoRegola || "normale",
                     // Metadata per debug
                     _metadata: {
                         regolaV3Id: regolaV3.id,
@@ -108,9 +114,11 @@ export function getRegoleGiorno(regoleV4, giorno, mese, anno) {
  * @param {Object} quando - Condizione temporale
  * @param {number} priorita
  * @param {boolean} obbligatoria
+ * @param {number|null} limiteAssegnazioniMensili
+ * @param {string} tipoRegola
  * @returns {RegolaV4}
  */
-export function nuovaRegolaV4(codiceTurno, ambulatorio, quando, priorita = 100, obbligatoria = true) {
+export function nuovaRegolaV4(codiceTurno, ambulatorio, quando, priorita = 100, obbligatoria = true, limiteAssegnazioniMensili = null, tipoRegola = "normale") {
     return {
         id: `regola_v4_${Date.now()}`,
         descrizione: `${ambulatorio} ${codiceTurno}`,
@@ -119,7 +127,9 @@ export function nuovaRegolaV4(codiceTurno, ambulatorio, quando, priorita = 100, 
         priorita,
         obbligatoria,
         quando,
-        attiva: true
+        attiva: true,
+        limiteAssegnazioniMensili,
+        tipoRegola
     };
 }
 
@@ -180,4 +190,49 @@ export function raggruppaRegoleV4(regoleV4) {
     });
 
     return gruppi;
+}
+
+/**
+ * Conta quante volte un turno è stato assegnato a un operatore nel mese
+ * Utile per verificare limiti mensili
+ *
+ * @param {Object} operatore - Profilo operatore
+ * @param {string} codiceTurno - Codice turno da contare (es. "BM")
+ * @param {number} anno - Anno
+ * @param {number} mese - Mese (0-11)
+ * @param {Object[]} bozzaTurni - Array turni dalla bozza (opzionale, per preview)
+ * @returns {number} - Numero di assegnazioni
+ */
+export function contaAssegnazioniMensili(operatore, codiceTurno, anno, mese, bozzaTurni = []) {
+    let count = 0;
+    const giorni = giorniNelMese(anno, mese);
+    const opId = typeof operatore === 'string' ? operatore : operatore.id;
+
+    for (let g = 1; g <= giorni; g++) {
+        // Check turni già salvati
+        const turnoSalvato = caricaTurno(operatore, g, anno, mese);
+        if (turnoSalvato) {
+            // Estrai codice turno da formato "AMBULATORIO_TURNO"
+            let codice = turnoSalvato;
+            if (turnoSalvato.includes('_')) {
+                const parts = turnoSalvato.split('_');
+                codice = parts[parts.length - 1];
+            }
+            if (codice === codiceTurno) {
+                count++;
+            }
+        }
+
+        // Check bozza (se fornita)
+        if (bozzaTurni && bozzaTurni.length > 0) {
+            const turnoBozza = bozzaTurni.find(t =>
+                t.giorno === g && t.operatore === opId && t.turno === codiceTurno
+            );
+            if (turnoBozza) {
+                count++;
+            }
+        }
+    }
+
+    return count;
 }
