@@ -5,7 +5,7 @@
 import { annoCorrente, meseCorrente, operatori, turni, ambulatori, viewMode } from '../state.js';
 import { giorniNelMese, primoGiornoMese, getNomeMese, getNomiGiorniSettimana } from '../calendar.js';
 import { caricaTurno, caricaNota, caricaBozzaGenerazione } from '../storage.js';
-import { calcolaOreOperatore, calcolaMinutiOperatore, getOrarioDettaglioTurno, calcolaOreTurno } from '../turni.js';
+import { calcolaOreOperatore, calcolaMinutiOperatore, calcolaMinutiTurno, getOrarioDettaglioTurno, calcolaOreTurno } from '../turni.js';
 import { assegnaTurno, aggiornaTitolo, inizializzaCancellazioni } from '../ui.js';
 import { renderBoxNoteMese, renderEditorNotaInline } from './note-editor.js';
 import { renderCoveragePanel } from './coverage-panel.js';
