@@ -45,11 +45,34 @@ export function minutiToOreMinuti(minutiTotali) {
  */
 export function calcolaMinutiTurno(turnoCode) {
     if (!turnoCode) return 0;
-    const turno = turni[turnoCode];
+
+    // Estrai codice turno da formato "AMBULATORIO_TURNO" se necessario
+    let codiceTurno = turnoCode;
+    if (turnoCode.includes('_')) {
+        const parts = turnoCode.split('_');
+        codiceTurno = parts[parts.length - 1]; // Ultima parte (es: "BM" da "BUD_BM")
+    }
+
+    const turno = turni[codiceTurno];
     if (!turno) return 0;
 
-    // TURNI SPECIALI (ferie, permessi, malattia, etc.) → sempre 0 ore
+    // TURNI SPECIALI con ore configurabili (v4.1.8+)
     if (turno.speciale) {
+        // Se ha campo 'ore', usalo (può essere positivo, negativo o zero)
+        if (turno.ore !== undefined && turno.ore !== null) {
+            return Math.round(Number(turno.ore) * 60);
+        }
+
+        // Se ha ingresso/uscita, calcola come turno normale
+        if (turno.ingresso && turno.uscita) {
+            let minuti = minutiTra(turno.ingresso, turno.uscita);
+            if (turno.sottraiPausa && turno.pausa) {
+                minuti -= turno.pausa;
+            }
+            return Math.max(0, minuti);
+        }
+
+        // Altrimenti 0 (es: vecchi turni speciali senza configurazione)
         return 0;
     }
 
@@ -130,8 +153,16 @@ export function calcolaMinutiAmbulatorio(amb, anno, mese, operatori) {
     operatori.forEach(op => {
         for (let g = 1; g <= giorni; g++) {
             const t = caricaTurno(op, g, anno, mese);
-            if (t && turni[t]) {
-                const turno = turni[t];
+            if (t) {
+                // Estrai codice turno da formato "AMBULATORIO_TURNO" se necessario
+                let codiceTurno = t;
+                if (t.includes('_')) {
+                    const parts = t.split('_');
+                    codiceTurno = parts[parts.length - 1];
+                }
+
+                const turno = turni[codiceTurno];
+                if (!turno) continue;
 
                 // TURNI A SEGMENTI: conta solo segmenti di questo ambulatorio
                 if (Array.isArray(turno.segmenti) && turno.segmenti.length > 0) {
@@ -170,7 +201,15 @@ export function calcolaOreAmbulatorio(amb, anno, mese, operatori) {
  */
 export function getOrarioDettaglioTurno(turnoCode, ambulatori) {
     if (!turnoCode) return "";
-    const turno = turni[turnoCode];
+
+    // Estrai codice turno da formato "AMBULATORIO_TURNO" se necessario
+    let codiceTurno = turnoCode;
+    if (turnoCode.includes('_')) {
+        const parts = turnoCode.split('_');
+        codiceTurno = parts[parts.length - 1];
+    }
+
+    const turno = turni[codiceTurno];
     if (!turno) return "";
 
     // TURNI A SEGMENTI (spezzati / multi-sede)
