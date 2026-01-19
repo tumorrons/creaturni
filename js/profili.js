@@ -20,9 +20,11 @@ export const SCHEMA_PROFILO_DEFAULT = {
         // Campi base (retrocompatibilità)
         sedePreferita: null,
         evitaSede: null,
-        evitaTurni: [],
+        evitaTurni: [], // Legacy - usare preferenzeTurni
         giorniPreferiti: [],
         giorniDaEvitare: [],
+        // Nuovo: preferenze turni con livelli (-2, -1, 0, +1, +2)
+        preferenzeTurni: {}, // Es: { "BU-M": 2, "BU-P": -1 }
         // Regole personalizzate (nuovo)
         regole: []
     },
@@ -131,6 +133,7 @@ export function migraStringaAProfilo(nomeOperatore) {
             sedePreferita: null,
             evitaSede: null,
             evitaTurni: [],
+            preferenzeTurni: {},
             giorniPreferiti: [],
             giorniDaEvitare: []
         },
@@ -233,6 +236,7 @@ export function normalizzaProfilo(profilo) {
             sedePreferita: profilo.preferenze?.sedePreferita || null,
             evitaSede: profilo.preferenze?.evitaSede || null,
             evitaTurni: profilo.preferenze?.evitaTurni || [],
+            preferenzeTurni: profilo.preferenze?.preferenzeTurni || {},
             giorniPreferiti: profilo.preferenze?.giorniPreferiti || [],
             giorniDaEvitare: profilo.preferenze?.giorniDaEvitare || [],
             regole: profilo.preferenze?.regole || []

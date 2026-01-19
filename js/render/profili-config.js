@@ -277,19 +277,46 @@ window.mostraFormProfilo = function(index = null) {
 
     // ===== SEZIONE 4: PREFERENZE =====
     const preferenzeSection = createSection("💡 Preferenze (soft - non bloccanti)", "#e8f5e9");
+    // Carica preferenzeTurni esistenti (nuovo sistema) o migra da evitaTurni (legacy)
+    const preferenzeTurni = profilo.preferenze?.preferenzeTurni || {};
+
+    // Migrazione automatica da evitaTurni a preferenzeTurni
+    if (!preferenzeTurni || Object.keys(preferenzeTurni).length === 0) {
+        const evitaTurni = profilo.preferenze?.evitaTurni || [];
+        evitaTurni.forEach(k => {
+            preferenzeTurni[k] = -1; // Migra come "Evitato"
+        });
+    }
+
     const preferenzeHTML = `
         <small style="color:#666;font-size:11px;font-style:italic;display:block;margin-bottom:10px">
-            Le preferenze guidano il sistema ma possono essere violate. Generano avvisi informativi.
+            Le preferenze guidano il sistema e influenzano la probabilità di assegnazione dei turni durante l'autogenerazione.
+            <strong>Livelli:</strong> Molto preferito (+30 punti), Preferito (+15), Neutro (0), Evitato (-15), Molto evitato (-30)
         </small>
-        <label style="font-weight:bold;font-size:13px;margin-top:10px">Turni da evitare:</label>
-        <div id="prof-pref-turni" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:5px">
-            ${Object.entries(turni).map(([k, t]) => `
-                <label style="display:flex;align-items:center;gap:4px;padding:4px 8px;background:#f5f5f5;border-radius:4px;cursor:pointer">
-                    <input type="checkbox" value="${k}" ${(profilo.preferenze?.evitaTurni || []).includes(k) ? 'checked' : ''}>
-                    <span style="font-size:12px">${k} - ${t.nome}</span>
-                </label>
-            `).join('')}
+        <label style="font-weight:bold;font-size:13px;margin-top:10px">📊 Preferenze Turni:</label>
+        <div id="prof-pref-turni" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px">
+            ${Object.entries(turni)
+                .filter(([k, t]) => !t.speciale) // Escludi turni speciali
+                .map(([k, t]) => {
+                    const livello = preferenzeTurni[k] || 0;
+                    return `
+                    <div style="display:flex;align-items:center;gap:8px;padding:8px;background:#f9f9f9;border-radius:4px">
+                        <span style="display:inline-block;width:12px;height:12px;background:${t.colore};border-radius:2px;flex-shrink:0"></span>
+                        <span style="font-size:11px;font-weight:bold;min-width:60px;flex-shrink:0">${k}</span>
+                        <select class="turno-preferenza" data-turno="${k}" style="flex:1;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:11px">
+                            <option value="2" ${livello === 2 ? 'selected' : ''}>⭐⭐ Molto preferito</option>
+                            <option value="1" ${livello === 1 ? 'selected' : ''}>⭐ Preferito</option>
+                            <option value="0" ${livello === 0 ? 'selected' : ''}>➖ Neutro</option>
+                            <option value="-1" ${livello === -1 ? 'selected' : ''}>❌ Evitato</option>
+                            <option value="-2" ${livello === -2 ? 'selected' : ''}>❌❌ Molto evitato</option>
+                        </select>
+                    </div>
+                `;
+            }).join('')}
         </div>
+        <small style="display:block;margin-top:8px;color:#666;font-size:10px">
+            💡 Più alto è il livello, maggiore è la probabilità che il sistema assegni quel turno all'operatore durante l'autogenerazione.
+        </small>
     `;
     preferenzeSection.innerHTML += preferenzeHTML;
     // Aggiungi sezione regole custom preferenze
@@ -399,9 +426,15 @@ window.salvaProfiloForm = function(index, oldId) {
     const contrattoTipo = document.getElementById("prof-contratto-tipo").value;
     const contrattoOre = parseInt(document.getElementById("prof-contratto-ore").value) || 40;
 
-    // Turni da evitare
-    const evitaTurni = Array.from(document.querySelectorAll("#prof-pref-turni input:checked"))
-        .map(cb => cb.value);
+    // Preferenze turni (nuovo sistema con livelli)
+    const preferenzeTurni = {};
+    document.querySelectorAll(".turno-preferenza").forEach(select => {
+        const turno = select.dataset.turno;
+        const livello = parseInt(select.value);
+        if (livello !== 0) { // Salva solo se non è neutro
+            preferenzeTurni[turno] = livello;
+        }
+    });
 
     // Vincoli
     const maxOre = parseInt(document.getElementById("prof-vincoli-maxore").value) || null;
@@ -421,7 +454,8 @@ window.salvaProfiloForm = function(index, oldId) {
         preferenze: {
             sedePreferita: sedePrincipale,
             evitaSede: null,
-            evitaTurni,
+            preferenzeTurni, // Nuovo sistema con livelli
+            evitaTurni: [], // Mantieni vuoto per retrocompatibilità
             giorniPreferiti: [],
             giorniDaEvitare: [],
             regole: getRegoleCustomDaSalvare().preferenze

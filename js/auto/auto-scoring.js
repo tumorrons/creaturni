@@ -93,20 +93,41 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
     // Altrimenti sede = 0 (sede non compatibile)
 
     // ========================================
-    // 2️⃣ PREFERENZE TURNO
+    // 2️⃣ PREFERENZE TURNO (con livelli di probabilità)
     // ========================================
-    const turniEvitati = profilo.preferenze?.evitaTurni || [];
-    if (turniEvitati.includes(codiceTurno)) {
-        breakdown.preferenzeTurno = -20;
-        motivazioni.push(`❌ Evita turno ${codiceTurno}`);
+    // Livelli preferenza:
+    // +2 = Molto preferito (+30 punti) → Alta probabilità di assegnazione
+    // +1 = Preferito (+15 punti) → Probabilità aumentata
+    //  0 = Neutro (0 punti) → Probabilità normale
+    // -1 = Evitato (-15 punti) → Probabilità ridotta
+    // -2 = Molto evitato (-30 punti) → Bassa probabilità di assegnazione
+
+    const preferenzeTurni = profilo.preferenze?.preferenzeTurni || {};
+    const livelloPreferenza = preferenzeTurni[codiceTurno] || 0;
+
+    if (livelloPreferenza !== 0) {
+        const peso = livelloPreferenza * 15; // -30, -15, +15, +30
+        breakdown.preferenzeTurno = peso;
+
+        if (livelloPreferenza === 2) {
+            motivazioni.push(`⭐⭐ Molto preferito (+30)`);
+        } else if (livelloPreferenza === 1) {
+            motivazioni.push(`⭐ Preferito (+15)`);
+        } else if (livelloPreferenza === -1) {
+            motivazioni.push(`❌ Evitato (-15)`);
+        } else if (livelloPreferenza === -2) {
+            motivazioni.push(`❌❌ Molto evitato (-30)`);
+        }
     }
 
-    // TODO futuro: aggiungere turniPreferiti: +20
-    // const turniPreferiti = profilo.preferenze?.turniPreferiti || [];
-    // if (turniPreferiti.includes(codiceTurno)) {
-    //     breakdown.preferenzeTurno = +20;
-    //     motivazioni.push(`⭐ Preferisce turno ${codiceTurno}`);
-    // }
+    // Retrocompatibilità: se non esiste preferenzeTurni ma esiste evitaTurni legacy
+    if (!preferenzeTurni[codiceTurno]) {
+        const turniEvitati = profilo.preferenze?.evitaTurni || [];
+        if (turniEvitati.includes(codiceTurno)) {
+            breakdown.preferenzeTurno = -20;
+            motivazioni.push(`❌ Evita turno (legacy)`);
+        }
+    }
 
     // ========================================
     // 3️⃣ BILANCIAMENTO ORE (moderato)
