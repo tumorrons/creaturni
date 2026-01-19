@@ -78,6 +78,31 @@ function caricaTurnoConBozza(operatore, giorno, anno, mese) {
     };
 }
 
+/**
+ * Calcola minuti totali operatore includendo la bozza se attiva
+ */
+function calcolaMinutiOperatoreConBozza(operatore, anno, mese) {
+    let totale = 0;
+    const giorni = giorniNelMese(anno, mese);
+
+    for (let g = 1; g <= giorni; g++) {
+        const turnoData = caricaTurnoConBozza(operatore, g, anno, mese);
+        totale += calcolaMinutiTurno(turnoData.turno);
+    }
+
+    return totale;
+}
+
+/**
+ * Calcola ore totali operatore in formato HH:MM includendo la bozza se attiva
+ */
+function calcolaOreOperatoreConBozza(operatore, anno, mese) {
+    const minuti = calcolaMinutiOperatoreConBozza(operatore, anno, mese);
+    const ore = Math.floor(minuti / 60);
+    const minutiResto = minuti % 60;
+    return `${ore}:${minutiResto.toString().padStart(2, "0")}`;
+}
+
 export function renderMese(anno = annoCorrente, mese = meseCorrente, compatto = false) {
     const container = document.getElementById("mese");
 
@@ -119,8 +144,8 @@ export function renderMese(anno = annoCorrente, mese = meseCorrente, compatto = 
     table.innerHTML = thead;
 
     operatori.forEach(op => {
-        const oreOperatore = calcolaOreOperatore(op, anno, mese);
-        const minutiOperatore = calcolaMinutiOperatore(op, anno, mese);
+        const oreOperatore = calcolaOreOperatoreConBozza(op, anno, mese);
+        const minutiOperatore = calcolaMinutiOperatoreConBozza(op, anno, mese);
 
         let styleOre = "color:#666;font-weight:normal";
         let iconaWarning = "";
