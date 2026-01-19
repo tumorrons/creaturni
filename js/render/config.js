@@ -311,7 +311,7 @@ function renderFormTurno(container) {
                 <span style="font-weight:bold">🏖️ Turno speciale (ferie, permessi, etc.)</span>
             </label>
             <br>
-            <small style="color:#666">I turni speciali non hanno orari e non contano nelle ore lavorative</small>
+            <small style="color:#666">I turni speciali possono avere orari configurabili e contare nelle ore lavorative</small>
             <br><br>
             <label style="display:inline-flex;align-items:center;cursor:pointer">
                 <input type="checkbox" id="turno-blocca-generazione" style="margin-right:8px">
@@ -319,6 +319,28 @@ function renderFormTurno(container) {
             </label>
             <br>
             <small style="color:#666">Operatori con questo turno non riceveranno assegnazioni automatiche</small>
+
+            <div id="turno-speciale-ore-section" style="display:none;margin-top:15px;padding:10px;background:#fff;border-radius:4px;border:2px solid #ff9800">
+                <label style="display:block;font-weight:bold;margin-bottom:8px">⏱️ Configurazione Ore Turno Speciale:</label>
+
+                <div style="margin-bottom:10px">
+                    <label style="display:block;margin-bottom:5px">Ore/Minuti (formato decimale, es: 8 o 8.5):</label>
+                    <input type="number" id="turno-speciale-ore" value="0" min="-24" max="24" step="0.1"
+                           style="padding:8px;border:1px solid #ccc;border-radius:4px;width:150px">
+                    <small style="display:block;color:#666;margin-top:5px">
+                        Lascia 0 se il turno non conta ore (es: FERIE). Usa valori negativi per sottrarre ore (es: -8 per RECUPERO)
+                    </small>
+                </div>
+
+                <div style="margin-bottom:10px">
+                    <label style="display:inline-flex;align-items:center;cursor:pointer">
+                        <input type="checkbox" id="turno-speciale-usa-orario" style="margin-right:8px" onchange="window.toggleSpecialeUsaOrario()">
+                        <span>Usa orario ingresso/uscita invece che ore fisse</span>
+                    </label>
+                    <br>
+                    <small style="color:#666">Se spuntato, calcola ore da ingresso/uscita invece di usare il valore fisso sopra</small>
+                </div>
+            </div>
         </div>
 
         <div style="margin-bottom:10px;padding:10px;background:#e3f2fd;border-radius:4px">
@@ -629,6 +651,19 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-speciale").checked = turno.speciale || false;
         document.getElementById("turno-blocca-generazione").checked = turno.bloccaGenerazione || false;
 
+        // Carica valori per turni speciali
+        if (turno.speciale) {
+            if (turno.ingresso && turno.uscita) {
+                // Turno speciale con orario
+                document.getElementById("turno-speciale-usa-orario").checked = true;
+                document.getElementById("turno-speciale-ore").value = 0;
+            } else {
+                // Turno speciale con ore fisse
+                document.getElementById("turno-speciale-usa-orario").checked = false;
+                document.getElementById("turno-speciale-ore").value = turno.ore || 0;
+            }
+        }
+
         // Controlla se il turno ha segmenti
         const haSegmenti = turno.segmenti && Array.isArray(turno.segmenti) && turno.segmenti.length > 0;
         document.getElementById("turno-segmentato").checked = haSegmenti;
@@ -683,6 +718,9 @@ window.mostraFormTurno = function(codice = null) {
         document.getElementById("turno-uscita").value = "";
         document.getElementById("turno-pausa").value = 0;
         document.getElementById("turno-sottrai-pausa").checked = true;
+        // Inizializza campi turni speciali
+        document.getElementById("turno-speciale-ore").value = 0;
+        document.getElementById("turno-speciale-usa-orario").checked = false;
         // Pulisci segmenti
         document.getElementById("segmenti-lista").innerHTML = "";
         segmentoCounter = 0;
@@ -721,8 +759,11 @@ window.mostraFormTurnoSpeciale = function() {
     document.getElementById("turno-uscita").value = "";
     document.getElementById("turno-pausa").value = 0;
     document.getElementById("turno-sottrai-pausa").checked = true;
+    // Inizializza campi turni speciali
+    document.getElementById("turno-speciale-ore").value = 0;
+    document.getElementById("turno-speciale-usa-orario").checked = false;
 
-    // Nascondi sezione orari
+    // Mostra/nascondi sezioni appropriate
     window.toggleTurnoSpeciale();
 
     form.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -834,11 +875,35 @@ window.salvaTurnoUI = function() {
     // Turni speciali
     else {
         turno.ambulatorio = null;
-        turno.ingresso = null;
-        turno.uscita = null;
-        turno.pausa = 0;
-        turno.sottraiPausa = false;
-        turno.ore = 0;
+
+        const specialeOre = parseFloat(document.getElementById("turno-speciale-ore").value) || 0;
+        const specialeUsaOrario = document.getElementById("turno-speciale-usa-orario").checked;
+
+        if (specialeUsaOrario) {
+            // Usa orario ingresso/uscita per calcolare le ore
+            if (ingresso && !validaOrario(ingresso)) {
+                alert("Formato orario ingresso non valido (usa HH:MM)");
+                return;
+            }
+
+            if (uscita && !validaOrario(uscita)) {
+                alert("Formato orario uscita non valido (usa HH:MM)");
+                return;
+            }
+
+            turno.ingresso = ingresso || null;
+            turno.uscita = uscita || null;
+            turno.pausa = pausa;
+            turno.sottraiPausa = sottraiPausa;
+            // Non impostiamo 'ore' perché verrà calcolato da ingresso/uscita
+        } else {
+            // Usa valore ore fisso
+            turno.ingresso = null;
+            turno.uscita = null;
+            turno.pausa = 0;
+            turno.sottraiPausa = false;
+            turno.ore = specialeOre; // Può essere positivo, negativo o zero
+        }
     }
 
     if (editCode) {
@@ -860,6 +925,7 @@ window.chiudiFormTurno = function() {
 
 window.toggleTurnoSpeciale = function() {
     const speciale = document.getElementById("turno-speciale").checked;
+    const specialeOreSection = document.getElementById("turno-speciale-ore-section");
     const orarioSection = document.getElementById("turno-orario-section");
     const segmentiSection = document.getElementById("turno-segmenti-section");
     const segmentatoCheckbox = document.getElementById("turno-segmentato");
@@ -867,16 +933,22 @@ window.toggleTurnoSpeciale = function() {
     const bloccaGenerazioneCheckbox = document.getElementById("turno-blocca-generazione");
 
     if (speciale) {
-        // Nascondi orario e segmenti per turni speciali
-        orarioSection.style.display = "none";
+        // Mostra sezione configurazione ore per turni speciali
+        specialeOreSection.style.display = "block";
+        // Nascondi segmenti per turni speciali
         segmentiSection.style.display = "none";
         segmentatoCheckbox.checked = false;
         segmentatoCheckbox.disabled = true;
+        // Disabilita ambulatorio (turni speciali non hanno ambulatorio specifico)
         ambulatorioInput.disabled = true;
         ambulatorioInput.value = "";
         // Attiva automaticamente blocca generazione
         bloccaGenerazioneCheckbox.checked = true;
+        // Mantieni visibile sezione orario (può essere usata se checkbox "usa orario" è attivo)
+        orarioSection.style.display = "block";
     } else {
+        // Nascondi sezione ore speciali
+        specialeOreSection.style.display = "none";
         // Riabilita checkbox segmentato
         segmentatoCheckbox.disabled = false;
         ambulatorioInput.disabled = false;
@@ -884,6 +956,21 @@ window.toggleTurnoSpeciale = function() {
         if (!segmentatoCheckbox.checked) {
             orarioSection.style.display = "block";
         }
+    }
+};
+
+window.toggleSpecialeUsaOrario = function() {
+    const usaOrario = document.getElementById("turno-speciale-usa-orario").checked;
+    const oreInput = document.getElementById("turno-speciale-ore");
+
+    if (usaOrario) {
+        // Disabilita campo ore fisso se si usa l'orario
+        oreInput.disabled = true;
+        oreInput.style.opacity = "0.5";
+    } else {
+        // Riabilita campo ore fisso
+        oreInput.disabled = false;
+        oreInput.style.opacity = "1";
     }
 };
 
