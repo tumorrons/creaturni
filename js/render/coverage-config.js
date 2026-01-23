@@ -443,12 +443,18 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
     const { ambulatori, turni } = getState();
 
     const item = document.createElement("div");
-    item.style.display = "flex";
-    item.style.gap = "8px";
-    item.style.alignItems = "center";
-    item.style.padding = "8px";
+    item.style.padding = "12px";
     item.style.background = "#f9f9f9";
     item.style.borderRadius = "4px";
+    item.style.border = "1px solid #ddd";
+    item.style.marginBottom = "8px";
+
+    // Prima riga: Ambulatorio, Turno, Quantità, Rimuovi
+    const rowPrincipale = document.createElement("div");
+    rowPrincipale.style.display = "flex";
+    rowPrincipale.style.gap = "8px";
+    rowPrincipale.style.alignItems = "center";
+    rowPrincipale.style.marginBottom = "8px";
 
     const ambSelect = document.createElement("select");
     ambSelect.className = "richiesto-amb";
@@ -464,7 +470,7 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
         opt.selected = richiesto && richiesto.ambulatorio === k;
         ambSelect.appendChild(opt);
     });
-    item.appendChild(ambSelect);
+    rowPrincipale.appendChild(ambSelect);
 
     const turnoSelect = document.createElement("select");
     turnoSelect.className = "richiesto-turno";
@@ -480,18 +486,19 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
         opt.selected = richiesto && richiesto.turno === k;
         turnoSelect.appendChild(opt);
     });
-    item.appendChild(turnoSelect);
+    rowPrincipale.appendChild(turnoSelect);
 
     const quantitaInput = document.createElement("input");
     quantitaInput.type = "number";
     quantitaInput.className = "richiesto-quantita";
     quantitaInput.min = "1";
     quantitaInput.value = richiesto?.quantita || "1";
+    quantitaInput.placeholder = "Qnt";
     quantitaInput.style.width = "60px";
     quantitaInput.style.padding = "6px";
     quantitaInput.style.border = "1px solid #ccc";
     quantitaInput.style.borderRadius = "4px";
-    item.appendChild(quantitaInput);
+    rowPrincipale.appendChild(quantitaInput);
 
     const btnRemove = document.createElement("button");
     btnRemove.type = "button";
@@ -500,7 +507,53 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
     btnRemove.style.fontSize = "11px";
     btnRemove.style.padding = "4px 8px";
     btnRemove.onclick = () => item.remove();
-    item.appendChild(btnRemove);
+    rowPrincipale.appendChild(btnRemove);
+
+    item.appendChild(rowPrincipale);
+
+    // Seconda riga: Opzioni avanzate (nuovi campi v4.3.0)
+    const rowAvanzate = document.createElement("div");
+    rowAvanzate.style.display = "grid";
+    rowAvanzate.style.gridTemplateColumns = "1fr 1fr 1fr";
+    rowAvanzate.style.gap = "8px";
+    rowAvanzate.style.fontSize = "12px";
+
+    // Limite mensile
+    const divLimite = document.createElement("div");
+    divLimite.innerHTML = `
+        <label style="display:block;color:#666;font-size:11px;margin-bottom:2px">Limite mensile (opz):</label>
+        <input type="number" class="richiesto-limite" min="1" value="${richiesto?.limiteAssegnazioniMensili || ''}"
+               placeholder="Es: 2"
+               style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:12px"
+               title="Max assegnazioni per operatore al mese (vuoto = nessun limite)">
+    `;
+    rowAvanzate.appendChild(divLimite);
+
+    // Priorità
+    const divPriorita = document.createElement("div");
+    divPriorita.innerHTML = `
+        <label style="display:block;color:#666;font-size:11px;margin-bottom:2px">Priorità:</label>
+        <input type="number" class="richiesto-priorita" value="${richiesto?.priorita || 100}"
+               placeholder="100"
+               style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:12px"
+               title="100=alta, 0=normale, negativa=bassa">
+    `;
+    rowAvanzate.appendChild(divPriorita);
+
+    // Tipo regola
+    const divTipo = document.createElement("div");
+    const tipoValue = richiesto?.tipoRegola || 'normale';
+    divTipo.innerHTML = `
+        <label style="display:block;color:#666;font-size:11px;margin-bottom:2px">Tipo:</label>
+        <select class="richiesto-tipo" style="width:100%;padding:4px;border:1px solid #ccc;border-radius:4px;font-size:12px">
+            <option value="normale" ${tipoValue === 'normale' ? 'selected' : ''}>Normale</option>
+            <option value="filler" ${tipoValue === 'filler' ? 'selected' : ''}>Filler (ore)</option>
+            <option value="last_resort" ${tipoValue === 'last_resort' ? 'selected' : ''}>Last resort</option>
+        </select>
+    `;
+    rowAvanzate.appendChild(divTipo);
+
+    item.appendChild(rowAvanzate);
 
     container.appendChild(item);
 };
@@ -536,8 +589,27 @@ window.salvaRegolaForm = function(index) {
         const amb = item.querySelector(".richiesto-amb").value;
         const turno = item.querySelector(".richiesto-turno").value;
         const quantita = parseInt(item.querySelector(".richiesto-quantita").value);
+
+        // Nuovi campi v4.3.0
+        const limiteInput = item.querySelector(".richiesto-limite");
+        const limiteValue = limiteInput ? limiteInput.value.trim() : '';
+        const limiteAssegnazioniMensili = limiteValue !== '' ? parseInt(limiteValue) : null;
+
+        const prioritaInput = item.querySelector(".richiesto-priorita");
+        const priorita = prioritaInput ? parseInt(prioritaInput.value) : 100;
+
+        const tipoSelect = item.querySelector(".richiesto-tipo");
+        const tipoRegola = tipoSelect ? tipoSelect.value : 'normale';
+
         if (amb && turno && quantita > 0) {
-            richiesti.push({ ambulatorio: amb, turno, quantita });
+            richiesti.push({
+                ambulatorio: amb,
+                turno,
+                quantita,
+                limiteAssegnazioniMensili,  // Può essere null
+                priorita,                    // Default 100
+                tipoRegola                   // Default 'normale'
+            });
         }
     });
 
