@@ -10,6 +10,8 @@
 export const SCHEMA_PROFILO_DEFAULT = {
     id: "",
     nome: "",
+    ruolo: "infermiere",  // Ruolo operatore (infermiere, oss, medico, coordinatore, altro, custom)
+    ruoloCustom: null,    // Se ruolo="altro", qui va il ruolo personalizzato
     sedePrincipale: null,
     sediSecondarie: [],
     contratto: {
@@ -62,6 +64,17 @@ export const TIPI_CONTRATTO = {
     FULL_TIME: "full-time",
     PART_TIME: "part-time"
 };
+
+/**
+ * Ruoli predefiniti per operatori
+ */
+export const RUOLI_PREDEFINITI = [
+    { value: "infermiere", label: "Infermiere", emoji: "👨‍⚕️" },
+    { value: "oss", label: "OSS (Operatore Socio-Sanitario)", emoji: "👩‍⚕️" },
+    { value: "medico", label: "Medico", emoji: "🩺" },
+    { value: "coordinatore", label: "Coordinatore", emoji: "📋" },
+    { value: "altro", label: "Altro", emoji: "👤" }
+];
 
 /**
  * Giorni della settimana (per preferenze)
@@ -226,6 +239,8 @@ export function normalizzaProfilo(profilo) {
     return {
         id: profilo.id || `OP_${Date.now()}`,
         nome: profilo.nome || "",
+        ruolo: profilo.ruolo || "infermiere",
+        ruoloCustom: profilo.ruoloCustom || null,
         sedePrincipale: profilo.sedePrincipale || null,
         sediSecondarie: profilo.sediSecondarie || [],
         contratto: {
@@ -248,6 +263,21 @@ export function normalizzaProfilo(profilo) {
             regole: profilo.vincoli?.regole || []
         }
     };
+}
+
+/**
+ * Ottiene il ruolo display dell'operatore
+ * Se ruolo="altro", ritorna il ruoloCustom, altrimenti la label dal ruolo predefinito
+ */
+export function getRuoloDisplay(profilo) {
+    if (!profilo) return "";
+
+    if (profilo.ruolo === "altro" && profilo.ruoloCustom) {
+        return profilo.ruoloCustom;
+    }
+
+    const ruoloPredefinito = RUOLI_PREDEFINITI.find(r => r.value === profilo.ruolo);
+    return ruoloPredefinito ? ruoloPredefinito.label : profilo.ruolo || "Infermiere";
 }
 
 /**

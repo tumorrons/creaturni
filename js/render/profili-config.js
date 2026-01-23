@@ -5,7 +5,7 @@
  */
 
 import { caricaOperatori, aggiornaProfilo, aggiungiOperatore, rimuoviOperatore } from '../storage.js';
-import { nuovoProfilo, validaProfilo, TIPI_CONTRATTO, GIORNI_SETTIMANA, getNomeOperatore } from '../profili.js';
+import { nuovoProfilo, validaProfilo, TIPI_CONTRATTO, GIORNI_SETTIMANA, getNomeOperatore, RUOLI_PREDEFINITI, getRuoloDisplay } from '../profili.js';
 import { ambulatori, turni } from '../state.js';
 import { renderConfig } from './config.js';
 // import { mostraRuleBuilder } from './rule-builder.js';  // Non usato qui, usato in profili-regole-ui.js
@@ -118,6 +118,19 @@ function renderProfiloItem(profilo, index) {
     }
 
     infoDiv.appendChild(titleDiv);
+
+    // Ruolo
+    const ruoloDisplay = getRuoloDisplay(profilo);
+    if (ruoloDisplay) {
+        const ruoloDiv = document.createElement("div");
+        ruoloDiv.style.fontSize = "12px";
+        ruoloDiv.style.color = "#666";
+        ruoloDiv.style.marginTop = "4px";
+        const ruoloObj = RUOLI_PREDEFINITI.find(r => r.value === profilo.ruolo);
+        const emoji = ruoloObj ? ruoloObj.emoji : "👤";
+        ruoloDiv.textContent = `${emoji} ${ruoloDisplay}`;
+        infoDiv.appendChild(ruoloDiv);
+    }
 
     // Dettagli sedi
     if (profilo.sedePrincipale) {
@@ -235,6 +248,22 @@ window.mostraFormProfilo = function(index = null) {
                placeholder="Es: Mario Rossi"
                style="padding:8px;border:1px solid #ccc;border-radius:4px;font-size:13px">
         <small style="color:#666;font-size:11px">Questo nome verrà visualizzato nei calendari e report</small>
+
+        <label style="font-weight:bold;font-size:13px;margin-top:15px">Ruolo:</label>
+        <select id="prof-ruolo" style="padding:8px;border:1px solid #ccc;border-radius:4px" onchange="window.toggleRuoloCustom()">
+            ${RUOLI_PREDEFINITI.map(r =>
+                `<option value="${r.value}" ${(profilo.ruolo || 'infermiere') === r.value ? 'selected' : ''}>${r.emoji} ${r.label}</option>`
+            ).join('')}
+        </select>
+        <small style="color:#666;font-size:11px">Ruolo professionale dell'operatore</small>
+
+        <div id="ruolo-custom-container" style="display:${(profilo.ruolo === 'altro') ? 'block' : 'none'};margin-top:10px">
+            <label style="font-weight:bold;font-size:13px">Specifica ruolo:</label>
+            <input type="text" id="prof-ruolo-custom" value="${profilo.ruoloCustom || ''}"
+                   placeholder="Es: Fisioterapista"
+                   style="padding:8px;border:1px solid #ccc;border-radius:4px;font-size:13px;width:100%">
+            <small style="color:#666;font-size:11px">Inserisci il ruolo personalizzato</small>
+        </div>
     `;
     form.appendChild(identitaSection);
 
@@ -422,6 +451,8 @@ function createSection(titolo, coloreBg) {
  */
 window.salvaProfiloForm = function(index, oldId) {
     const nome = document.getElementById("prof-nome").value.trim();
+    const ruolo = document.getElementById("prof-ruolo").value;
+    const ruoloCustom = document.getElementById("prof-ruolo-custom").value.trim() || null;
     const sedePrincipale = document.getElementById("prof-sede-principale").value || null;
     const contrattoTipo = document.getElementById("prof-contratto-tipo").value;
     const contrattoOre = parseInt(document.getElementById("prof-contratto-ore").value) || 40;
@@ -445,6 +476,8 @@ window.salvaProfiloForm = function(index, oldId) {
     const profilo = {
         id: oldId || `OP_${nome.replace(/\s+/g, '_')}_${Date.now()}`,
         nome,
+        ruolo,
+        ruoloCustom,
         sedePrincipale,
         sediSecondarie: [],
         contratto: {
@@ -484,6 +517,17 @@ window.salvaProfiloForm = function(index, oldId) {
 
     renderConfig();
     return true;
+};
+
+/**
+ * Mostra/nasconde campo ruolo custom
+ */
+window.toggleRuoloCustom = function() {
+    const ruoloSelect = document.getElementById("prof-ruolo");
+    const customContainer = document.getElementById("ruolo-custom-container");
+    if (ruoloSelect && customContainer) {
+        customContainer.style.display = ruoloSelect.value === "altro" ? "block" : "none";
+    }
 };
 
 window.eliminaProfilo = function(index) {
