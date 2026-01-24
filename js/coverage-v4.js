@@ -1,15 +1,23 @@
 /**
- * coverage-v4.js - Sistema di regole v4.0
+ * coverage-v4.js - Sistema di regole v4.1
  *
- * FILOSOFIA v4:
- * - NON esistono più x2, x3, etc.
+ * FILOSOFIA v4.1 (FASE 1B):
  * - Ogni slot è una REGOLA SEPARATA con priorità
+ * - Ogni slot specifica RUOLO RICHIESTO (INF, OSS, etc.)
+ * - Slot atomici: 1 turno + 1 ruolo + 1 priorità
  * - Vincoli HARD (esclusioni) separati da priorità SOFT (scoring)
  *
- * Esempio:
- *   Invece di: { turno: "BU-M", quantita: 2 }
- *   Abbiamo:   [ { turno: "BU-M", priorita: 100 },
- *                { turno: "BU-M", priorita: 90 } ]
+ * Esempio PRIMA (v4.0):
+ *   { turno: "BU-M", quantita: 2 } → 2 slot generici
+ *
+ * Esempio DOPO (v4.1):
+ *   richiesteRuoli: [
+ *     { ruolo: "infermiere", quantita: 1 },
+ *     { ruolo: "oss", quantita: 1 }
+ *   ]
+ *   → slot atomici:
+ *     [ { turno: "BU-M", ruoloRichiesto: "infermiere", priorita: 100 },
+ *       { turno: "BU-M", ruoloRichiesto: "oss", priorita: 90 } ]
  */
 
 import { regolaApplicaAGiorno } from './coverage.js';
@@ -17,13 +25,14 @@ import { giorniNelMese } from './calendar.js';
 import { caricaTurno } from './storage.js';
 
 /**
- * Schema regola v4 (slot singolo)
+ * Schema regola v4.1 (slot singolo con ruolo)
  *
  * @typedef {Object} RegolaV4
  * @property {string} id - ID univoco regola
  * @property {string} descrizione - Descrizione testuale
  * @property {string} codiceTurno - Codice turno (es. "BU-M")
  * @property {string} ambulatorio - Sede (es. "BUD")
+ * @property {string|null} ruoloRichiesto - Ruolo richiesto: "infermiere", "oss", "medico", "coordinatore", "altro", null (ANY)
  * @property {number} priorita - Priorità (100 = massima, 0 = normale, negativa = bassa)
  * @property {boolean} obbligatoria - Se false, genera solo warning
  * @property {Object} quando - Condizione temporale (stesso formato v3)
@@ -33,17 +42,36 @@ import { caricaTurno } from './storage.js';
  */
 
 /**
- * Espande regole v3 (con quantità) in regole v4 (slot multipli con priorità)
+ * Schema richiesta ruolo in regola v3
  *
- * Logica priorità:
- * - Primo slot: priorita base (default 100)
- * - Secondo slot: priorita base - 10
- * - Terzo slot: priorita base - 20
+ * @typedef {Object} RichiestaRuolo
+ * @property {string} ruolo - Ruolo richiesto ("infermiere", "oss", "medico", "coordinatore", "altro")
+ * @property {number} quantita - Quanti operatori di questo ruolo servono
+ */
+
+/**
+ * Espande regole v3 (con quantità/ruoli) in regole v4.1 (slot atomici con ruolo)
+ *
+ * LOGICA v4.1 (FASE 1B):
+ * - Se richiesteRuoli presente → espandi per ruolo
+ * - Se richiesteRuoli assente (legacy) → usa quantita con ruoloRichiesto: null
+ *
+ * Priorità:
+ * - Prima richiesta ruolo, primo slot: prioritaBase
+ * - Prima richiesta ruolo, secondo slot: prioritaBase - 10
+ * - Seconda richiesta ruolo, primo slot: prioritaBase - 20
  * - etc.
+ *
+ * Esempio:
+ *   richiesteRuoli: [ {ruolo: "infermiere", quantita: 2}, {ruolo: "oss", quantita: 1} ]
+ *   → slot:
+ *     INF #1: priorita 100
+ *     INF #2: priorita 90
+ *     OSS #1: priorita 80
  *
  * @param {Object[]} regoleV3 - Regole in formato v3
  * @param {number} prioritaBase - Priorità base per primo slot (default 100)
- * @returns {RegolaV4[]} - Array regole v4 espanse
+ * @returns {RegolaV4[]} - Array regole v4.1 espanse
  */
 export function espandiRegoleV3inV4(regoleV3, prioritaBase = 100) {
     const regoleV4 = [];
@@ -54,36 +82,83 @@ export function espandiRegoleV3inV4(regoleV3, prioritaBase = 100) {
 
         // Per ogni requisito nella regola v3
         regolaV3.richiesti.forEach((requisito, reqIndex) => {
-            const { ambulatorio, turno, quantita } = requisito;
+            const { ambulatorio, turno, quantita, richiesteRuoli } = requisito;
 
-            // Crea N regole v4 separate (una per ogni slot richiesto)
-            for (let slot = 0; slot < quantita; slot++) {
-                const priorita = prioritaBase - (slot * 10);
+            // === CASO 1: Richieste per ruolo (v4.1) ===
+            if (richiesteRuoli && Array.isArray(richiesteRuoli) && richiesteRuoli.length > 0) {
+                let offsetPriorita = 0;
 
-                regoleV4.push({
-                    id: `${regolaV3.id}_${reqIndex}_slot${slot}`,
-                    descrizione: `${regolaV3.descrizione} [slot ${slot + 1}/${quantita}]`,
-                    codiceTurno: turno,
-                    ambulatorio: ambulatorio,
-                    priorita: priorita,
-                    obbligatoria: regolaV3.severita === "warning",
-                    quando: regolaV3.quando,
-                    attiva: true,
-                    limiteAssegnazioniMensili: requisito.limiteAssegnazioniMensili || null,
-                    tipoRegola: requisito.tipoRegola || "normale",
-                    // Metadata per debug
-                    _metadata: {
-                        regolaV3Id: regolaV3.id,
-                        slotIndex: slot,
-                        totaleSlot: quantita
+                richiesteRuoli.forEach((richiestaRuolo, ruoloIndex) => {
+                    const { ruolo, quantita: quantitaRuolo } = richiestaRuolo;
+
+                    // Valida ruolo
+                    if (!ruolo || typeof ruolo !== 'string') {
+                        console.warn(`[COVERAGE-V4] Ruolo non valido in regola ${regolaV3.id}, requisito ${reqIndex}, skip`);
+                        return;
+                    }
+
+                    // Crea slot atomici per questo ruolo
+                    for (let slot = 0; slot < quantitaRuolo; slot++) {
+                        const priorita = prioritaBase - offsetPriorita;
+                        offsetPriorita += 10;
+
+                        regoleV4.push({
+                            id: `${regolaV3.id}_${reqIndex}_${ruolo}_slot${slot}`,
+                            descrizione: `${regolaV3.descrizione} [${ruolo.toUpperCase()} ${slot + 1}/${quantitaRuolo}]`,
+                            codiceTurno: turno,
+                            ambulatorio: ambulatorio,
+                            ruoloRichiesto: ruolo,  // ⭐ NUOVO: ruolo specifico richiesto
+                            priorita: priorita,
+                            obbligatoria: regolaV3.severita === "warning",
+                            quando: regolaV3.quando,
+                            attiva: true,
+                            limiteAssegnazioniMensili: requisito.limiteAssegnazioniMensili || null,
+                            tipoRegola: requisito.tipoRegola || "normale",
+                            // Metadata per debug
+                            _metadata: {
+                                regolaV3Id: regolaV3.id,
+                                ruolo: ruolo,
+                                slotIndex: slot,
+                                totaleSlotRuolo: quantitaRuolo
+                            }
+                        });
+                        contatore++;
                     }
                 });
-                contatore++;
+            }
+            // === CASO 2: Legacy - quantita senza ruoli (v4.0) ===
+            else {
+                // Retrocompatibilità: crea slot generici senza ruolo specifico
+                for (let slot = 0; slot < quantita; slot++) {
+                    const priorita = prioritaBase - (slot * 10);
+
+                    regoleV4.push({
+                        id: `${regolaV3.id}_${reqIndex}_slot${slot}`,
+                        descrizione: `${regolaV3.descrizione} [slot ${slot + 1}/${quantita}]`,
+                        codiceTurno: turno,
+                        ambulatorio: ambulatorio,
+                        ruoloRichiesto: null,  // ⭐ NULL = ANY (qualsiasi ruolo)
+                        priorita: priorita,
+                        obbligatoria: regolaV3.severita === "warning",
+                        quando: regolaV3.quando,
+                        attiva: true,
+                        limiteAssegnazioniMensili: requisito.limiteAssegnazioniMensili || null,
+                        tipoRegola: requisito.tipoRegola || "normale",
+                        // Metadata per debug
+                        _metadata: {
+                            regolaV3Id: regolaV3.id,
+                            slotIndex: slot,
+                            totaleSlot: quantita,
+                            legacy: true
+                        }
+                    });
+                    contatore++;
+                }
             }
         });
     });
 
-    console.log(`[COVERAGE-V4] Espanse ${regoleV3.length} regole v3 → ${contatore} slot v4`);
+    console.log(`[COVERAGE-V4.1] Espanse ${regoleV3.length} regole v3 → ${contatore} slot v4.1 atomici`);
     return regoleV4;
 }
 
@@ -107,23 +182,27 @@ export function getRegoleGiorno(regoleV4, giorno, mese, anno) {
 }
 
 /**
- * Crea regola v4 manuale (senza espansione da v3)
+ * Crea regola v4.1 manuale (senza espansione da v3)
  *
  * @param {string} codiceTurno
  * @param {string} ambulatorio
  * @param {Object} quando - Condizione temporale
+ * @param {string|null} ruoloRichiesto - Ruolo richiesto (null = ANY)
  * @param {number} priorita
  * @param {boolean} obbligatoria
  * @param {number|null} limiteAssegnazioniMensili
  * @param {string} tipoRegola
  * @returns {RegolaV4}
  */
-export function nuovaRegolaV4(codiceTurno, ambulatorio, quando, priorita = 100, obbligatoria = true, limiteAssegnazioniMensili = null, tipoRegola = "normale") {
+export function nuovaRegolaV4(codiceTurno, ambulatorio, quando, ruoloRichiesto = null, priorita = 100, obbligatoria = true, limiteAssegnazioniMensili = null, tipoRegola = "normale") {
     return {
         id: `regola_v4_${Date.now()}`,
-        descrizione: `${ambulatorio} ${codiceTurno}`,
+        descrizione: ruoloRichiesto
+            ? `${ambulatorio} ${codiceTurno} [${ruoloRichiesto.toUpperCase()}]`
+            : `${ambulatorio} ${codiceTurno}`,
         codiceTurno,
         ambulatorio,
+        ruoloRichiesto,
         priorita,
         obbligatoria,
         quando,

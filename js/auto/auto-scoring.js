@@ -223,25 +223,41 @@ function scoreToConfidenza(score) {
  * LIVELLO 2 - AMMISSIBILITÀ
  * Filtra operatori che NON possono fare un turno (vincoli HARD non negoziabili)
  *
- * FILOSOFIA:
+ * FILOSOFIA v4.1 (FASE 1B):
  * - Se non passa qui, NON viene mai valutato
  * - ZERO compromessi: vincolo violato = esclusione
  * - MAI usare penalità invece di esclusione
+ * - RUOLO è vincolo HARD: se richiesto INF, solo INF competono
  *
  * @param {Object[]} profili - Array profili operatori
  * @param {number} giorno
  * @param {string} codiceTurno
  * @param {string} ambulatorio
- * @param {Object} context - Deve contenere { anno, mese, bozza }
+ * @param {Object} context - Deve contenere { anno, mese, bozza, ruoloRichiesto }
  * @returns {Object[]} - Profili ammissibili
  */
 export function filtraOperatoriValidi(profili, giorno, codiceTurno, ambulatorio, context) {
     const { turni } = getState();
-    const { anno, mese, bozza } = context;
+    const { anno, mese, bozza, ruoloRichiesto } = context;
 
     return profili.filter(profilo => {
         // ========================================
-        // 1️⃣ VINCOLO: Turni bloccanti (ferie, permessi)
+        // 1️⃣ VINCOLO: Ruolo richiesto
+        // ========================================
+        if (ruoloRichiesto !== null && ruoloRichiesto !== undefined) {
+            // Normalizza ruolo profilo
+            const ruoloProfilo = profilo.ruolo || "infermiere";  // default
+
+            // Match esatto (case-insensitive per sicurezza)
+            if (ruoloProfilo.toLowerCase() !== ruoloRichiesto.toLowerCase()) {
+                console.log(`[L2-RUOLO] ❌ ${profilo.nome} escluso: ruolo ${ruoloProfilo.toUpperCase()}, richiesto ${ruoloRichiesto.toUpperCase()}`);
+                return false;
+            }
+        }
+        // Se ruoloRichiesto è null/undefined → ANY, tutti passano
+
+        // ========================================
+        // 2️⃣ VINCOLO: Turni bloccanti (ferie, permessi)
         // ========================================
         if (anno !== undefined && mese !== undefined) {
             const turnoAssegnato = caricaTurno(profilo.id, giorno, anno, mese);
@@ -263,7 +279,7 @@ export function filtraOperatoriValidi(profili, giorno, codiceTurno, ambulatorio,
         }
 
         // ========================================
-        // 2️⃣ VINCOLO: Max ore settimanali
+        // 3️⃣ VINCOLO: Max ore settimanali
         // ========================================
         const maxOre = profilo.vincoli?.maxOreSettimanali;
         if (maxOre && bozza) {
@@ -281,7 +297,7 @@ export function filtraOperatoriValidi(profili, giorno, codiceTurno, ambulatorio,
         }
 
         // ========================================
-        // 3️⃣ VINCOLO: Regole custom con gravità ERROR
+        // 4️⃣ VINCOLO: Regole custom con gravità ERROR
         // ========================================
         const regoleVincoli = profilo.vincoli?.regole || [];
         if (regoleVincoli.length > 0 && bozza) {

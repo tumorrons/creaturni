@@ -57,9 +57,10 @@ export function generaBozza(mese, anno, parametri = {}) {
 
         // 2. Per ogni regola (slot), trova il miglior operatore
         for (const slot of turniNecessari) {
-            const { ambulatorio, codiceTurno, motivazione, priorita, obbligatoria } = slot;
+            const { ambulatorio, codiceTurno, ruoloRichiesto, motivazione, priorita, obbligatoria } = slot;
 
-            console.log(`[AUTO-ENGINE]   📌 Slot: ${ambulatorio} ${codiceTurno} (priorità: ${priorita})`);
+            const ruoloLabel = ruoloRichiesto ? `[${ruoloRichiesto.toUpperCase()}]` : '[ANY]';
+            console.log(`[AUTO-ENGINE]   📌 Slot: ${ambulatorio} ${codiceTurno} ${ruoloLabel} (priorità: ${priorita})`);
 
             // 2a. Controlla se già assegnato (se soloGiorniVuoti = true)
             if (parametri.soloGiorniVuoti && !parametri.rigeneraTutto) {
@@ -86,10 +87,11 @@ export function generaBozza(mese, anno, parametri = {}) {
                 anno,
                 codiceTurno,
                 ambulatorio,
+                ruoloRichiesto,  // ⭐ NUOVO: passa ruolo richiesto
                 parametri,
                 bozza,
                 priorita,
-                slot.limiteAssegnazioniMensili || null  // Passa limite mensile se presente
+                slot.limiteAssegnazioniMensili || null
             );
 
             if (risultato) {
@@ -165,9 +167,11 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4) {
         slots.push({
             ambulatorio: regola.ambulatorio,
             codiceTurno: regola.codiceTurno,
+            ruoloRichiesto: regola.ruoloRichiesto || null,  // ⭐ NUOVO: ruolo richiesto (null = ANY)
             motivazione: regola.descrizione,
             priorita: regola.priorita,
-            obbligatoria: regola.obbligatoria
+            obbligatoria: regola.obbligatoria,
+            limiteAssegnazioniMensili: regola.limiteAssegnazioniMensili
         });
     });
 
@@ -177,8 +181,8 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4) {
 /**
  * Trova il miglior operatore per uno slot specifico
  *
- * FILOSOFIA v4:
- * - NON più bonus copertura (ogni slot è indipendente)
+ * FILOSOFIA v4.1 (FASE 1B):
+ * - Ogni slot richiede un RUOLO specifico (INF, OSS, etc.) o ANY
  * - Priorità slot influenza solo l'ordine di assegnazione, NON lo score
  * - Score puramente basato su: sede, preferenze, bilanciamento
  *
@@ -188,15 +192,16 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4) {
  * @param {number} anno
  * @param {string} codiceTurno
  * @param {string} ambulatorio
+ * @param {string|null} ruoloRichiesto - Ruolo richiesto (null = ANY)
  * @param {Object} parametri
  * @param {Object} bozza - Bozza corrente con turni già generati
  * @param {number} priorita - Priorità dello slot (informativa, non influenza score)
  * @param {number|null} limiteAssegnazioniMensili - Max assegnazioni mensili per operatore (null = nessun limite)
  * @returns {Object|null} - { profilo, totale, breakdown, motivazioni, confidenza } o null
  */
-function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, priorita, limiteAssegnazioniMensili = null) {
+function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, ruoloRichiesto, parametri, bozza, priorita, limiteAssegnazioniMensili = null) {
     // 1. LIVELLO 2: Filtra operatori ammissibili (vincoli HARD)
-    const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese, bozza });
+    const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese, bozza, ruoloRichiesto });
 
     console.log(`[DEBUG] Giorno ${giorno} - Candidati validi: ${operatoriValidi.map(p => p.nome).join(', ')}`);
 
