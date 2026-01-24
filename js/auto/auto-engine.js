@@ -195,8 +195,8 @@ function identificaTurniNecessari(giorno, mese, anno, parametri, regoleV4) {
  * @returns {Object|null} - { profilo, totale, breakdown, motivazioni, confidenza } o null
  */
 function trovaMiglioreOperatore(operatori, giorno, mese, anno, codiceTurno, ambulatorio, parametri, bozza, priorita, limiteAssegnazioniMensili = null) {
-    // 1. Filtra operatori validi (non inattivi, non assenti, etc.)
-    const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese });
+    // 1. LIVELLO 2: Filtra operatori ammissibili (vincoli HARD)
+    const operatoriValidi = filtraOperatoriValidi(operatori, giorno, codiceTurno, ambulatorio, { anno, mese, bozza });
 
     console.log(`[DEBUG] Giorno ${giorno} - Candidati validi: ${operatoriValidi.map(p => p.nome).join(', ')}`);
 

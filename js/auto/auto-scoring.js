@@ -20,14 +20,20 @@ import { calcolaMinutiTurno } from '../turni.js';
 console.log('📊 [AUTO-SCORING] Modulo caricato correttamente (v4.0 - formula sede>preferenze>bilanciamento)');
 
 /**
+ * LIVELLO 3 - VALUTAZIONE (SCORE)
  * Calcola lo score di un operatore per un'assegnazione specifica
  *
+ * FILOSOFIA:
+ * - Valuta SOLO operatori ammissibili (già filtrati da L2)
+ * - Score MAI usato per escludere
+ * - Componenti: sede, preferenze, bilanciamento, random
+ *
  * FORMULA v4:
- *   score = sede (100/40) + preferenze (±20) + bilanciamento (max 20) + random (0-2)
+ *   score = sede (100/40) + preferenze (±30) + bilanciamento (max 20) + random (0-2)
  *
  * GERARCHIA:
  *   1. SEDE (100/40) - domina sempre
- *   2. PREFERENZE (±20) - influenzano ma non sovrastano sede
+ *   2. PREFERENZE (±30) - influenzano ma non sovrastano sede
  *   3. BILANCIAMENTO (max 20) - pareggia tra operatori con stesso livello
  *   4. RANDOM (0-2) - evita pattern fissi
  *
@@ -41,10 +47,9 @@ console.log('📊 [AUTO-SCORING] Modulo caricato correttamente (v4.0 - formula s
 export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio, context) {
     const breakdown = {
         sede: 0,              // +100 (primaria) o +40 (secondaria)
-        preferenzeTurno: 0,   // ±20 (preferiti/evitati)
+        preferenzeTurno: 0,   // ±30 (preferiti/evitati)
         bilanciamento: 0,     // max +20 (inversamente proporzionale ore)
         variazione: 0,        // +0-2 (random)
-        vincoliViolati: 0,    // penalità vincoli hard
         totale: 0
     };
 
@@ -143,35 +148,18 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
     }
 
     // ========================================
-    // 4️⃣ VINCOLI HARD (penalità se violati)
+    // 4️⃣ SOFT CONSTRAINTS (warning, non error)
     // ========================================
-    // Controlla vincolo maxOreSettimanali
-    const maxOre = profilo.vincoli?.maxOreSettimanali;
-    if (maxOre && context.oreSettimana !== undefined) {
-        const minutiTurno = calcolaMinutiTurno(codiceTurno);
-        const oreTurno = minutiTurno / 60;
-        const nuovoTotale = context.oreSettimana + oreTurno;
-
-        if (nuovoTotale > maxOre) {
-            const eccesso = nuovoTotale - maxOre;
-            breakdown.vincoliViolati = -50; // Penalità forte
-            motivazioni.push(`⚠️ Supererebbe ore max (${nuovoTotale.toFixed(1)}/${maxOre}, +${eccesso.toFixed(1)}h)`);
-        }
-    }
-
-    // Regole custom vincoli
+    // Regole custom con gravità 'warning' possono dare penalità SOFT
+    // (le regole con 'error' sono già state filtrate in L2)
     const regoleVincoli = profilo.vincoli?.regole || [];
     if (regoleVincoli.length > 0) {
         regoleVincoli.filter(r => r.attiva).forEach(regola => {
             const risultato = valutaRegolaCustom(regola, context);
-            if (risultato) {
-                if (risultato.gravita === 'warning') {
-                    breakdown.vincoliViolati -= 30;
-                    motivazioni.push("⚠️ " + risultato.messaggio);
-                } else if (risultato.gravita === 'error') {
-                    breakdown.vincoliViolati -= 60;
-                    motivazioni.push("❌ " + risultato.messaggio);
-                }
+            if (risultato && risultato.gravita === 'warning') {
+                // Warning riduce score ma non esclude
+                breakdown.bilanciamento -= 10; // penalità leggera
+                motivazioni.push("⚠️ " + risultato.messaggio);
             }
         });
     }
@@ -188,8 +176,7 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
         breakdown.sede +
         breakdown.preferenzeTurno +
         breakdown.bilanciamento +
-        breakdown.variazione +
-        breakdown.vincoliViolati;
+        breakdown.variazione;
 
     // ========================================
     // 7️⃣ CALCOLA CONFIDENZA (normalizza score in 0-1)
@@ -209,22 +196,22 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
  * Score positivi alti = confidenza alta
  * Score negativi = confidenza bassa
  *
- * SCALE v4:
- *   Max teorico: 100 + 20 + 20 + 2 = 142
- *   Min teorico: 0 - 20 - 60 (vincoli) = -80
+ * SCALE v4 (post FASE 1A):
+ *   Max teorico: 100 + 30 + 20 + 2 = 152
+ *   Min teorico: 0 - 30 - 10 (warning soft) = -40
  *
  * @param {number} score
  * @returns {number} - Confidenza 0-1
  */
 function scoreToConfidenza(score) {
-    // Punteggio massimo realistico: 142
-    // Normalizziamo con range -100 → +150
+    // Punteggio massimo realistico: 152
+    // Normalizziamo con range -50 → +150
     const maxScore = 150;
 
     // Se score negativo, confidenza proporzionalmente bassa
     if (score < 0) {
-        // -100 → 0.0, -50 → 0.25, 0 → 0.5
-        return Math.max(0, 0.5 + (score / 200));
+        // -50 → 0.25, 0 → 0.5
+        return Math.max(0, 0.5 + (score / 100));
     }
 
     // Se score positivo, scala verso 1.0
@@ -233,23 +220,31 @@ function scoreToConfidenza(score) {
 }
 
 /**
- * Filtra operatori che NON possono fare un turno
- * (vincoli hard che rendono impossibile l'assegnazione)
+ * LIVELLO 2 - AMMISSIBILITÀ
+ * Filtra operatori che NON possono fare un turno (vincoli HARD non negoziabili)
+ *
+ * FILOSOFIA:
+ * - Se non passa qui, NON viene mai valutato
+ * - ZERO compromessi: vincolo violato = esclusione
+ * - MAI usare penalità invece di esclusione
  *
  * @param {Object[]} profili - Array profili operatori
  * @param {number} giorno
  * @param {string} codiceTurno
  * @param {string} ambulatorio
- * @param {Object} context - Deve contenere { anno, mese }
- * @returns {Object[]} - Profili validi
+ * @param {Object} context - Deve contenere { anno, mese, bozza }
+ * @returns {Object[]} - Profili ammissibili
  */
 export function filtraOperatoriValidi(profili, giorno, codiceTurno, ambulatorio, context) {
     const { turni } = getState();
+    const { anno, mese, bozza } = context;
 
     return profili.filter(profilo => {
-        // 1. Controlla se operatore ha un turno speciale (ferie, permesso, etc.)
-        if (context.anno !== undefined && context.mese !== undefined) {
-            const turnoAssegnato = caricaTurno(profilo.id, giorno, context.anno, context.mese);
+        // ========================================
+        // 1️⃣ VINCOLO: Turni bloccanti (ferie, permessi)
+        // ========================================
+        if (anno !== undefined && mese !== undefined) {
+            const turnoAssegnato = caricaTurno(profilo.id, giorno, anno, mese);
 
             if (turnoAssegnato) {
                 // Estrai codice turno (può essere "AMB_TURNO" o solo "TURNO")
@@ -259,20 +254,152 @@ export function filtraOperatoriValidi(profili, giorno, codiceTurno, ambulatorio,
 
                 const defTurno = turni[codiceTurnoPuro];
 
-                // Se il turno ha bloccaGenerazione: true, esclude l'operatore
+                // Se il turno ha bloccaGenerazione: true, ESCLUDE l'operatore
                 if (defTurno && defTurno.bloccaGenerazione) {
-                    console.log(`[AUTO-SCORING] ❌ ${profilo.nome} ha ${defTurno.nome} il giorno ${giorno}`);
+                    console.log(`[L2-VINCOLI] ❌ ${profilo.nome} escluso: ha ${defTurno.nome} il giorno ${giorno}`);
                     return false;
                 }
             }
         }
 
-        // 2. Altri vincoli hard futuri:
-        // - blacklist turni assoluta
-        // - vincoli di ruolo/competenze
+        // ========================================
+        // 2️⃣ VINCOLO: Max ore settimanali
+        // ========================================
+        const maxOre = profilo.vincoli?.maxOreSettimanali;
+        if (maxOre && bozza) {
+            // Calcola ore settimana includendo bozza
+            const oreSettimana = calcolaOreSettimanaProfilo(profilo.id, giorno, mese, anno, bozza);
+            const minutiTurno = calcolaMinutiTurno(codiceTurno);
+            const oreTurno = minutiTurno / 60;
+            const nuovoTotale = oreSettimana + oreTurno;
 
+            if (nuovoTotale > maxOre) {
+                const eccesso = (nuovoTotale - maxOre).toFixed(1);
+                console.log(`[L2-VINCOLI] ❌ ${profilo.nome} escluso: supererebbe ore max (${nuovoTotale.toFixed(1)}/${maxOre}, +${eccesso}h)`);
+                return false;
+            }
+        }
+
+        // ========================================
+        // 3️⃣ VINCOLO: Regole custom con gravità ERROR
+        // ========================================
+        const regoleVincoli = profilo.vincoli?.regole || [];
+        if (regoleVincoli.length > 0 && bozza) {
+            // Costruisci context minimale per valutazione regole
+            const contextRegole = costruisciContextMinimale(profilo.id, giorno, mese, anno, codiceTurno, ambulatorio, bozza);
+
+            for (const regola of regoleVincoli) {
+                if (!regola.attiva) continue;
+
+                const risultato = valutaRegolaCustom(regola, contextRegole);
+                if (risultato && risultato.gravita === 'error') {
+                    console.log(`[L2-VINCOLI] ❌ ${profilo.nome} escluso: ${risultato.messaggio}`);
+                    return false;
+                }
+            }
+        }
+
+        // ========================================
+        // ✅ AMMISSIBILE
+        // ========================================
         return true;
     });
+}
+
+/**
+ * Calcola ore settimana per un profilo (ultimi 7 giorni)
+ * Include turni da localStorage + bozza
+ *
+ * @param {string} profiloId
+ * @param {number} giorno
+ * @param {number} mese
+ * @param {number} anno
+ * @param {Object} bozza
+ * @returns {number} - Ore settimana
+ */
+function calcolaOreSettimanaProfilo(profiloId, giorno, mese, anno, bozza) {
+    const turniOperatore = raccogliTurniOperatoreProfilo(profiloId, mese, anno, bozza);
+
+    let minutiTotali = 0;
+    const inizioSettimana = Math.max(1, giorno - 6);
+
+    turniOperatore.forEach(t => {
+        if (t.giorno >= inizioSettimana && t.giorno < giorno) {
+            minutiTotali += calcolaMinutiTurno(t.codiceTurno);
+        }
+    });
+
+    return minutiTotali / 60;
+}
+
+/**
+ * Raccoglie turni operatore (localStorage + bozza)
+ *
+ * @param {string} operatoreId
+ * @param {number} mese
+ * @param {number} anno
+ * @param {Object} bozza
+ * @returns {Array} - Array di { giorno, codiceTurno }
+ */
+function raccogliTurniOperatoreProfilo(operatoreId, mese, anno, bozza) {
+    const turniArray = [];
+    const giorni = new Date(anno, mese + 1, 0).getDate();
+
+    // 1. Turni da localStorage
+    for (let g = 1; g <= giorni; g++) {
+        const turnoSalvato = caricaTurno(operatoreId, g, anno, mese);
+        if (turnoSalvato) {
+            let codiceTurno = turnoSalvato;
+            if (turnoSalvato.includes('_')) {
+                const parts = turnoSalvato.split('_');
+                codiceTurno = parts[parts.length - 1];
+            }
+            turniArray.push({ giorno: g, codiceTurno });
+        }
+    }
+
+    // 2. Turni dalla bozza
+    if (bozza && bozza.turni) {
+        bozza.turni.forEach(t => {
+            if (t.operatore === operatoreId) {
+                turniArray.push({ giorno: t.giorno, codiceTurno: t.turno });
+            }
+        });
+    }
+
+    return turniArray;
+}
+
+/**
+ * Costruisce context minimale per valutazione regole custom
+ *
+ * @param {string} profiloId
+ * @param {number} giorno
+ * @param {number} mese
+ * @param {number} anno
+ * @param {string} codiceTurno
+ * @param {string} ambulatorio
+ * @param {Object} bozza
+ * @returns {Object} - Context minimale
+ */
+function costruisciContextMinimale(profiloId, giorno, mese, anno, codiceTurno, ambulatorio, bozza) {
+    const { turni } = getState();
+    const data = new Date(anno, mese, giorno);
+    const turniOperatore = raccogliTurniOperatoreProfilo(profiloId, mese, anno, bozza);
+
+    return {
+        giorno,
+        mese,
+        anno,
+        giornoSettimana: data.getDay(),
+        turno: {
+            codice: codiceTurno,
+            ambulatorio: ambulatorio,
+            ...(turni[codiceTurno] || {})
+        },
+        oreSettimana: calcolaOreSettimanaProfilo(profiloId, giorno, mese, anno, bozza),
+        turniNelMese: turniOperatore.length
+    };
 }
 
 /**
