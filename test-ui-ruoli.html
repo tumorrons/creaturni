@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <title>Test UI Regole con Ruoli</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; }
+        .regola-item { padding: 12px; background: #f9f9f9; border-radius: 4px; border: 1px solid #ddd; margin-bottom: 12px; }
+        .row { display: flex; gap: 8px; margin-bottom: 12px; align-items: center; }
+        .row > * { flex: 1; }
+        select, input { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; }
+        .btn-add { background: #4caf50; color: white; }
+        .btn-remove { background: #f44336; color: white; padding: 4px 8px; font-size: 11px; }
+        .toggle-section { padding: 8px; background: #fff; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 12px; }
+        .richieste-ruoli { background: #fff; padding: 8px; border-radius: 4px; }
+        .richiesta-ruolo-row { display: flex; gap: 8px; margin-bottom: 4px; padding: 4px; background: #fafafa; border: 1px solid #e0e0e0; border-radius: 4px; align-items: center; }
+        .output { margin-top: 20px; padding: 12px; background: #e8f5e9; border-radius: 4px; }
+        pre { background: #263238; color: #aed581; padding: 12px; border-radius: 4px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🧪 Test UI - Regole con Ruoli INF/OSS</h2>
+        <p style="color:#666;">Questa è un'anteprima dell'UI per creare regole con <code>richiesteRuoli</code>.</p>
+
+        <div id="regole-container"></div>
+
+        <button class="btn-add" onclick="aggiungiRegola()">➕ Aggiungi Turno Richiesto</button>
+
+        <div class="output">
+            <h3>📋 Output JSON</h3>
+            <button class="btn-add" onclick="mostraJSON()">🔄 Aggiorna Preview</button>
+            <pre id="json-output">{}</pre>
+        </div>
+    </div>
+
+    <script>
+        const RUOLI = [
+            { value: "infermiere", label: "👨‍⚕️ Infermiere" },
+            { value: "oss", label: "👩‍⚕️ OSS" },
+            { value: "medico", label: "🩺 Medico" },
+            { value: "coordinatore", label: "📋 Coordinatore" },
+            { value: "altro", label: "👤 Altro" }
+        ];
+
+        const AMBULATORI = {
+            "BUD": "Budrio",
+            "SLU": "San Luca",
+            "MOL": "Molare"
+        };
+
+        const TURNI = {
+            "M": "Mattina",
+            "P": "Pomeriggio",
+            "N": "Notte"
+        };
+
+        function aggiungiRegola() {
+            const container = document.getElementById('regole-container');
+            const item = document.createElement('div');
+            item.className = 'regola-item';
+
+            item.innerHTML = `
+                <div class="row">
+                    <select class="ambulatorio">
+                        <option value="">Ambulatorio...</option>
+                        ${Object.entries(AMBULATORI).map(([k,v]) => `<option value="${k}">${k} - ${v}</option>`).join('')}
+                    </select>
+                    <select class="turno">
+                        <option value="">Turno...</option>
+                        ${Object.entries(TURNI).map(([k,v]) => `<option value="${k}">${k} - ${v}</option>`).join('')}
+                    </select>
+                    <button class="btn-remove" onclick="this.parentElement.parentElement.remove()">❌</button>
+                </div>
+
+                <div class="toggle-section">
+                    <div style="margin-bottom:8px;">
+                        <strong style="font-size:12px;">Modalità:</strong>
+                        <label style="margin-left:12px;font-size:12px;">
+                            <input type="radio" name="mode-${Date.now()}" value="totale" class="mode-toggle" onchange="toggleMode(this)">
+                            Quantità totale (legacy)
+                        </label>
+                        <label style="margin-left:12px;font-size:12px;">
+                            <input type="radio" name="mode-${Date.now()}" value="per-ruolo" class="mode-toggle" checked onchange="toggleMode(this)">
+                            ⭐ Per ruolo (INF/OSS)
+                        </label>
+                    </div>
+                </div>
+
+                <div class="area-totale" style="display:none;">
+                    <div class="row">
+                        <div>
+                            <label style="font-size:11px;color:#666;">Quantità totale:</label>
+                            <input type="number" class="quantita-totale" value="1" min="1">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="area-ruoli">
+                    <div class="richieste-ruoli">
+                        <div class="richieste-ruoli-container"></div>
+                        <button class="btn-add" style="font-size:11px;padding:4px 8px;margin-top:4px;" onclick="aggiungiRichiestaRuolo(this)">+ Aggiungi ruolo</button>
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(item);
+
+            // Aggiungi default: 1 INF
+            const containerRuoli = item.querySelector('.richieste-ruoli-container');
+            containerRuoli.appendChild(creaRichiestaRuolo('infermiere', 1));
+        }
+
+        function toggleMode(radio) {
+            const item = radio.closest('.regola-item');
+            const areaTotale = item.querySelector('.area-totale');
+            const areaRuoli = item.querySelector('.area-ruoli');
+
+            if (radio.value === 'totale') {
+                areaTotale.style.display = 'block';
+                areaRuoli.style.display = 'none';
+            } else {
+                areaTotale.style.display = 'none';
+                areaRuoli.style.display = 'block';
+            }
+        }
+
+        function aggiungiRichiestaRuolo(btn) {
+            const container = btn.parentElement.querySelector('.richieste-ruoli-container');
+            container.appendChild(creaRichiestaRuolo('oss', 1));
+        }
+
+        function creaRichiestaRuolo(ruolo, quantita) {
+            const row = document.createElement('div');
+            row.className = 'richiesta-ruolo-row';
+
+            row.innerHTML = `
+                <select class="richiesta-ruolo" style="flex:1;">
+                    ${RUOLI.map(r => `<option value="${r.value}" ${r.value === ruolo ? 'selected' : ''}>${r.label}</option>`).join('')}
+                </select>
+                <input type="number" class="richiesta-quantita" value="${quantita}" min="1" style="width:60px;">
+                <button class="btn-remove" onclick="this.parentElement.remove()">✖</button>
+            `;
+
+            return row;
+        }
+
+        function mostraJSON() {
+            const items = document.querySelectorAll('.regola-item');
+            const richiesti = [];
+
+            items.forEach(item => {
+                const amb = item.querySelector('.ambulatorio').value;
+                const turno = item.querySelector('.turno').value;
+                const modeToggle = item.querySelector('.mode-toggle:checked');
+
+                if (!amb || !turno) return;
+
+                const obj = {
+                    ambulatorio: amb,
+                    turno: turno
+                };
+
+                if (modeToggle && modeToggle.value === 'totale') {
+                    // Modalità legacy
+                    obj.quantita = parseInt(item.querySelector('.quantita-totale').value);
+                } else {
+                    // Modalità per ruolo
+                    const richiesteRuoli = [];
+                    const rows = item.querySelectorAll('.richiesta-ruolo-row');
+                    rows.forEach(row => {
+                        const ruolo = row.querySelector('.richiesta-ruolo').value;
+                        const qnt = parseInt(row.querySelector('.richiesta-quantita').value);
+                        if (ruolo && qnt > 0) {
+                            richiesteRuoli.push({ ruolo, quantita: qnt });
+                        }
+                    });
+                    obj.richiesteRuoli = richiesteRuoli;
+                }
+
+                richiesti.push(obj);
+            });
+
+            const output = {
+                descrizione: "Test regola con ruoli",
+                quando: { tipo: "feriali" },
+                severita: "error",
+                attiva: true,
+                richiesti: richiesti
+            };
+
+            document.getElementById('json-output').textContent = JSON.stringify(output, null, 2);
+        }
+
+        // Inizializza con un esempio
+        aggiungiRegola();
+        mostraJSON();
+    </script>
+</body>
+</html>

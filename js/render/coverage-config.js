@@ -7,6 +7,7 @@
 import { caricaRegole, salvaRegole, nuovaRegolaVuota, validaRegola, resetRegolaDefault } from '../coverage.js';
 import { ambulatori, turni, getState } from '../state.js';
 import { renderConfig } from './config.js';
+import { RUOLI_PREDEFINITI } from '../profili.js';
 
 /**
  * Renderizza la sezione configurazione regole
