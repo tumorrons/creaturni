@@ -179,7 +179,16 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
         breakdown.variazione;
 
     // ========================================
-    // 7️⃣ CALCOLA CONFIDENZA (normalizza score in 0-1)
+    // 7️⃣ CLAMP SCORE [-100, +100]
+    // ========================================
+    // IGIENE MATEMATICA: mantiene score in range prevedibile
+    // - Previene dominanza assoluta
+    // - Rende confronti significativi
+    // - Stabilizza sistema
+    breakdown.totale = Math.max(-100, Math.min(100, breakdown.totale));
+
+    // ========================================
+    // 8️⃣ CALCOLA CONFIDENZA (normalizza score in 0-1)
     // ========================================
     const confidenza = scoreToConfidenza(breakdown.totale);
 
@@ -196,27 +205,20 @@ export function calcolaScoreOperatore(profilo, giorno, codiceTurno, ambulatorio,
  * Score positivi alti = confidenza alta
  * Score negativi = confidenza bassa
  *
- * SCALE v4 (post FASE 1A):
- *   Max teorico: 100 + 30 + 20 + 2 = 152
- *   Min teorico: 0 - 30 - 10 (warning soft) = -40
+ * SCALE v4.5 (post clamp):
+ *   Range garantito: [-100, +100] (clamped)
+ *   Mapping lineare: -100 → 0.0, 0 → 0.5, +100 → 1.0
  *
- * @param {number} score
+ * @param {number} score - Score già clamped in [-100, +100]
  * @returns {number} - Confidenza 0-1
  */
 function scoreToConfidenza(score) {
-    // Punteggio massimo realistico: 152
-    // Normalizziamo con range -50 → +150
-    const maxScore = 150;
-
-    // Se score negativo, confidenza proporzionalmente bassa
-    if (score < 0) {
-        // -50 → 0.25, 0 → 0.5
-        return Math.max(0, 0.5 + (score / 100));
-    }
-
-    // Se score positivo, scala verso 1.0
-    // 0 → 0.5, 75 → 0.75, 150+ → 1.0
-    return Math.min(1.0, 0.5 + (score / (maxScore * 2)));
+    // Mapping lineare semplice:
+    // -100 → 0.0
+    //    0 → 0.5
+    // +100 → 1.0
+    // Formula: (score + 100) / 200
+    return (score + 100) / 200;
 }
 
 /**
