@@ -147,9 +147,20 @@ function renderRegolaItem(regola, index) {
     richiestiDiv.style.fontSize = "11px";
     richiestiDiv.style.color = "#888";
     richiestiDiv.style.marginTop = "4px";
-    richiestiDiv.textContent = `Richiesti: ${regola.richiesti.map(r =>
-        `${r.turno} × ${r.quantita}`
-    ).join(', ')}`;
+    richiestiDiv.textContent = `Richiesti: ${regola.richiesti.map(r => {
+        if (r.richiesteRuoli && Array.isArray(r.richiesteRuoli) && r.richiesteRuoli.length > 0) {
+            // Modalità per ruolo
+            const ruoliStr = r.richiesteRuoli.map(rr => {
+                const ruoloLabel = RUOLI_PREDEFINITI.find(rp => rp.value === rr.ruolo);
+                const emoji = ruoloLabel ? ruoloLabel.emoji : '👤';
+                return `${emoji}×${rr.quantita}`;
+            }).join('+');
+            return `${r.ambulatorio || '?'} ${r.turno} [${ruoliStr}]`;
+        } else {
+            // Modalità legacy
+            return `${r.ambulatorio || '?'} ${r.turno} × ${r.quantita}`;
+        }
+    }).join(', ')}`;
     infoDiv.appendChild(richiestiDiv);
 
     item.appendChild(infoDiv);
@@ -443,19 +454,24 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
     // Ottieni stato corrente
     const { ambulatori, turni } = getState();
 
+    // Determina se ha richiesteRuoli o quantità legacy
+    const hasRichiesteRuoli = richiesto && richiesto.richiesteRuoli && Array.isArray(richiesto.richiesteRuoli) && richiesto.richiesteRuoli.length > 0;
+    const modeDefault = hasRichiesteRuoli ? 'per-ruolo' : 'totale';
+
     const item = document.createElement("div");
+    item.className = "regola-item";
     item.style.padding = "12px";
     item.style.background = "#f9f9f9";
     item.style.borderRadius = "4px";
     item.style.border = "1px solid #ddd";
     item.style.marginBottom = "8px";
 
-    // Prima riga: Ambulatorio, Turno, Quantità, Rimuovi
+    // Prima riga: Ambulatorio, Turno, Rimuovi
     const rowPrincipale = document.createElement("div");
     rowPrincipale.style.display = "flex";
     rowPrincipale.style.gap = "8px";
     rowPrincipale.style.alignItems = "center";
-    rowPrincipale.style.marginBottom = "8px";
+    rowPrincipale.style.marginBottom = "12px";
 
     const ambSelect = document.createElement("select");
     ambSelect.className = "richiesto-amb";
@@ -489,18 +505,6 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
     });
     rowPrincipale.appendChild(turnoSelect);
 
-    const quantitaInput = document.createElement("input");
-    quantitaInput.type = "number";
-    quantitaInput.className = "richiesto-quantita";
-    quantitaInput.min = "1";
-    quantitaInput.value = richiesto?.quantita || "1";
-    quantitaInput.placeholder = "Qnt";
-    quantitaInput.style.width = "60px";
-    quantitaInput.style.padding = "6px";
-    quantitaInput.style.border = "1px solid #ccc";
-    quantitaInput.style.borderRadius = "4px";
-    rowPrincipale.appendChild(quantitaInput);
-
     const btnRemove = document.createElement("button");
     btnRemove.type = "button";
     btnRemove.className = "config-btn config-remove";
@@ -512,7 +516,102 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
 
     item.appendChild(rowPrincipale);
 
-    // Seconda riga: Opzioni avanzate (nuovi campi v4.3.0)
+    // Toggle section: Modalità
+    const toggleSection = document.createElement("div");
+    toggleSection.className = "toggle-section";
+    toggleSection.style.padding = "8px";
+    toggleSection.style.background = "#fff";
+    toggleSection.style.border = "1px solid #ddd";
+    toggleSection.style.borderRadius = "4px";
+    toggleSection.style.marginBottom = "12px";
+
+    const uniqueId = Date.now() + Math.random();
+    toggleSection.innerHTML = `
+        <div style="margin-bottom:8px;">
+            <strong style="font-size:12px;">Modalità:</strong>
+            <label style="margin-left:12px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="mode-${uniqueId}" value="totale" class="mode-toggle" ${modeDefault === 'totale' ? 'checked' : ''}>
+                Quantità totale (legacy)
+            </label>
+            <label style="margin-left:12px;font-size:12px;cursor:pointer;">
+                <input type="radio" name="mode-${uniqueId}" value="per-ruolo" class="mode-toggle" ${modeDefault === 'per-ruolo' ? 'checked' : ''}>
+                ⭐ Per ruolo (INF/OSS)
+            </label>
+        </div>
+    `;
+    item.appendChild(toggleSection);
+
+    // Area totale (legacy)
+    const areaTotale = document.createElement("div");
+    areaTotale.className = "area-totale";
+    areaTotale.style.display = modeDefault === 'totale' ? 'block' : 'none';
+    areaTotale.style.marginBottom = "12px";
+    areaTotale.innerHTML = `
+        <div style="display:flex;gap:8px;">
+            <div style="flex:1;">
+                <label style="font-size:11px;color:#666;">Quantità totale:</label>
+                <input type="number" class="quantita-totale" value="${richiesto?.quantita || 1}" min="1"
+                       style="width:100%;padding:6px;border:1px solid #ccc;border-radius:4px;">
+            </div>
+        </div>
+    `;
+    item.appendChild(areaTotale);
+
+    // Area ruoli (new)
+    const areaRuoli = document.createElement("div");
+    areaRuoli.className = "area-ruoli";
+    areaRuoli.style.display = modeDefault === 'per-ruolo' ? 'block' : 'none';
+    areaRuoli.style.marginBottom = "12px";
+
+    const richiesteRuoliDiv = document.createElement("div");
+    richiesteRuoliDiv.className = "richieste-ruoli";
+    richiesteRuoliDiv.style.background = "#fff";
+    richiesteRuoliDiv.style.padding = "8px";
+    richiesteRuoliDiv.style.borderRadius = "4px";
+
+    const richiesteRuoliContainer = document.createElement("div");
+    richiesteRuoliContainer.className = "richieste-ruoli-container";
+    richiesteRuoliDiv.appendChild(richiesteRuoliContainer);
+
+    const btnAggiungiRuolo = document.createElement("button");
+    btnAggiungiRuolo.type = "button";
+    btnAggiungiRuolo.className = "config-btn config-add";
+    btnAggiungiRuolo.style.fontSize = "11px";
+    btnAggiungiRuolo.style.padding = "4px 8px";
+    btnAggiungiRuolo.style.marginTop = "4px";
+    btnAggiungiRuolo.textContent = "+ Aggiungi ruolo";
+    btnAggiungiRuolo.onclick = function() {
+        richiesteRuoliContainer.appendChild(window.createRichiestaRuoloRow('oss', 1));
+    };
+    richiesteRuoliDiv.appendChild(btnAggiungiRuolo);
+
+    areaRuoli.appendChild(richiesteRuoliDiv);
+    item.appendChild(areaRuoli);
+
+    // Popola richiesteRuoli se presenti
+    if (hasRichiesteRuoli) {
+        richiesto.richiesteRuoli.forEach(rr => {
+            richiesteRuoliContainer.appendChild(window.createRichiestaRuoloRow(rr.ruolo, rr.quantita));
+        });
+    } else {
+        // Default: 1 infermiere
+        richiesteRuoliContainer.appendChild(window.createRichiestaRuoloRow('infermiere', 1));
+    }
+
+    // Toggle logic
+    toggleSection.querySelectorAll('.mode-toggle').forEach(radio => {
+        radio.addEventListener('change', function() {
+            if (this.value === 'totale') {
+                areaTotale.style.display = 'block';
+                areaRuoli.style.display = 'none';
+            } else {
+                areaTotale.style.display = 'none';
+                areaRuoli.style.display = 'block';
+            }
+        });
+    });
+
+    // Opzioni avanzate (nuovi campi v4.3.0)
     const rowAvanzate = document.createElement("div");
     rowAvanzate.style.display = "grid";
     rowAvanzate.style.gridTemplateColumns = "1fr 1fr 1fr";
@@ -559,6 +658,62 @@ window.aggiungiRichiestoUI = function(richiesto = null) {
     container.appendChild(item);
 };
 
+/**
+ * Helper: crea una singola riga richiesta ruolo
+ */
+window.createRichiestaRuoloRow = function(ruolo, quantita) {
+    const row = document.createElement("div");
+    row.className = "richiesta-ruolo-row";
+    row.style.display = "flex";
+    row.style.gap = "8px";
+    row.style.marginBottom = "4px";
+    row.style.padding = "4px";
+    row.style.background = "#fafafa";
+    row.style.border = "1px solid #e0e0e0";
+    row.style.borderRadius = "4px";
+    row.style.alignItems = "center";
+
+    const selectRuolo = document.createElement("select");
+    selectRuolo.className = "richiesta-ruolo";
+    selectRuolo.style.flex = "1";
+    selectRuolo.style.padding = "4px";
+    selectRuolo.style.border = "1px solid #ccc";
+    selectRuolo.style.borderRadius = "4px";
+    selectRuolo.style.fontSize = "12px";
+
+    RUOLI_PREDEFINITI.forEach(r => {
+        const opt = document.createElement("option");
+        opt.value = r.value;
+        opt.textContent = `${r.emoji} ${r.label}`;
+        opt.selected = r.value === ruolo;
+        selectRuolo.appendChild(opt);
+    });
+    row.appendChild(selectRuolo);
+
+    const inputQuantita = document.createElement("input");
+    inputQuantita.type = "number";
+    inputQuantita.className = "richiesta-quantita";
+    inputQuantita.value = quantita || 1;
+    inputQuantita.min = "1";
+    inputQuantita.style.width = "60px";
+    inputQuantita.style.padding = "4px";
+    inputQuantita.style.border = "1px solid #ccc";
+    inputQuantita.style.borderRadius = "4px";
+    inputQuantita.style.fontSize = "12px";
+    row.appendChild(inputQuantita);
+
+    const btnRemove = document.createElement("button");
+    btnRemove.type = "button";
+    btnRemove.className = "config-btn config-remove";
+    btnRemove.textContent = "✖";
+    btnRemove.style.fontSize = "10px";
+    btnRemove.style.padding = "2px 6px";
+    btnRemove.onclick = () => row.remove();
+    row.appendChild(btnRemove);
+
+    return row;
+};
+
 window.salvaRegolaForm = function(index) {
     const regole = caricaRegole();
 
@@ -584,12 +739,11 @@ window.salvaRegolaForm = function(index) {
     }
 
     // Raccogli richiesti
-    const richiestiItems = document.querySelectorAll("#richiesti-container > div");
+    const richiestiItems = document.querySelectorAll("#richiesti-container > .regola-item");
     const richiesti = [];
     richiestiItems.forEach(item => {
         const amb = item.querySelector(".richiesto-amb").value;
         const turno = item.querySelector(".richiesto-turno").value;
-        const quantita = parseInt(item.querySelector(".richiesto-quantita").value);
 
         // Nuovi campi v4.3.0
         const limiteInput = item.querySelector(".richiesto-limite");
@@ -602,15 +756,44 @@ window.salvaRegolaForm = function(index) {
         const tipoSelect = item.querySelector(".richiesto-tipo");
         const tipoRegola = tipoSelect ? tipoSelect.value : 'normale';
 
-        if (amb && turno && quantita > 0) {
-            richiesti.push({
-                ambulatorio: amb,
-                turno,
-                quantita,
-                limiteAssegnazioniMensili,  // Può essere null
-                priorita,                    // Default 100
-                tipoRegola                   // Default 'normale'
+        // Verifica modalità selezionata
+        const modeToggle = item.querySelector(".mode-toggle:checked");
+        const mode = modeToggle ? modeToggle.value : 'totale';
+
+        const obj = {
+            ambulatorio: amb,
+            turno,
+            limiteAssegnazioniMensili,  // Può essere null
+            priorita,                    // Default 100
+            tipoRegola                   // Default 'normale'
+        };
+
+        if (mode === 'totale') {
+            // Modalità legacy: quantità totale
+            const quantitaTotaleInput = item.querySelector(".quantita-totale");
+            const quantita = quantitaTotaleInput ? parseInt(quantitaTotaleInput.value) : 1;
+            obj.quantita = quantita;
+
+            if (amb && turno && quantita > 0) {
+                richiesti.push(obj);
+            }
+        } else {
+            // Modalità per ruolo: richiesteRuoli array
+            const richiesteRuoli = [];
+            const rows = item.querySelectorAll(".richiesta-ruolo-row");
+            rows.forEach(row => {
+                const ruolo = row.querySelector(".richiesta-ruolo").value;
+                const qnt = parseInt(row.querySelector(".richiesta-quantita").value);
+                if (ruolo && qnt > 0) {
+                    richiesteRuoli.push({ ruolo, quantita: qnt });
+                }
             });
+
+            obj.richiesteRuoli = richiesteRuoli;
+
+            if (amb && turno && richiesteRuoli.length > 0) {
+                richiesti.push(obj);
+            }
         }
     });
 
